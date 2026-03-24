@@ -114,17 +114,27 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       label: '',
       items: [
-        { to: '/app', label: 'Dashboard', icon: 'pi-home', exact: true },
+        { to: '/app',      label: 'Dashboard', icon: 'pi-home', exact: true },
+        { to: '/app/logs', label: 'Logs',      icon: 'pi-list' },
       ],
     },
     {
       label: 'Exports',
       items: [
-        { to: '/app/daily-orders',    label: 'Daily Orders',   icon: 'pi-calendar' },
+        { to: '/app/daily-orders',    label: 'Daily Orders',    icon: 'pi-calendar' },
         { to: '/app/priority-export', label: 'Priority Export', icon: 'pi-file-export' },
       ],
     },
   ]
+
+  if (auth.user?.role === 'admin') {
+    groups.push({
+      label: 'Admin',
+      items: [
+        { to: '/app/settings', label: 'Settings', icon: 'pi-cog' },
+      ],
+    })
+  }
 
   groups.push({
     label: 'Account',
