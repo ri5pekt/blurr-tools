@@ -63,6 +63,9 @@ services:
       SMTP_PASS: ${SMTP_PASS}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Blurr Tools}
       APP_URL: ${APP_URL}
+      EXPORTS_DIR: /app/exports
+    volumes:
+      - exports_data:/app/exports
     expose:
       - "3000"
     healthcheck:
@@ -96,6 +99,9 @@ services:
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
       GOOGLE_OAUTH_REFRESH_TOKEN: ${GOOGLE_OAUTH_REFRESH_TOKEN}
+      EXPORTS_DIR: /app/exports
+    volumes:
+      - exports_data:/app/exports
 
   # ─────────────────────────────────────────
   #  Web (Vue 3 — served by nginx)
@@ -136,3 +142,4 @@ volumes:
   redis_data:
   caddy_data:
   caddy_config:
+  exports_data:

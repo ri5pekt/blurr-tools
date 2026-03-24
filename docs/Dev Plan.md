@@ -145,13 +145,18 @@ First real feature. Fetches Shopify orders for a selected date and exports them 
 
 ---
 
-### Phase 5 — Settings
-Admin-accessible settings panel.
+### Phase 5 — Settings + Profile ✅
+Admin-accessible settings panel and per-user profile screen.
 
 **Deliverables:**
-- `SettingsView.vue` with tabs: Users, Scheduled Exports
-- **Users tab:** full user management UI — list all users, invite new user (triggers email), update role, deactivate; uses existing Phase 1 API routes
-- **Scheduled Exports tab:** list of configured scheduled jobs, enable/disable toggles
+- ✅ `SettingsView.vue` (`/app/settings`) with tabs: Users (admin only), Scheduled Exports
+- ✅ **Users tab:** full user management UI — list all users (avatar, name, email, role, status, joined date), invite new user (inline form → triggers email, shows temp password if email fails), inline role change dropdown, deactivate/reactivate button; uses Phase 1 API routes
+- ✅ **Scheduled Exports tab:** list of configured scheduled jobs with cron + timezone pills, enable/disable toggle (admin only); reads from per-feature schedule endpoints
+- ✅ `ProfileView.vue` (`/app/profile`) — edit display name, change password (current + new + confirm with show/hide toggles)
+- ✅ Settings nav item is admin-only in sidebar; Profile link added under "Account" group (visible to all users)
+- ✅ Header user badge is clickable → navigates to `/app/profile`
+- ✅ `updateProfile()` action added to auth store — updates local user state after name change
+- ✅ App version bumped to `0.4.0`
 
 > All credentials (Shopify, Google Sheets, SMTP, etc.) are managed exclusively via the `.env` file — they are not surfaced in the UI.
 

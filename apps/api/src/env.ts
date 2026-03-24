@@ -17,6 +17,7 @@ const envSchema = z.object({
   EMAIL_FROM:             z.string().email().optional(),
   EMAIL_FROM_NAME:        z.string().optional().default('Blurr Tools'),
   APP_URL:                z.string().url().optional().default('http://localhost:5173'),
+  EXPORTS_DIR:            z.string().default('/app/exports'),
 })
 
 const parsed = envSchema.safeParse(process.env)

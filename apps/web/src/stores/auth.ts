@@ -61,6 +61,19 @@ export const useAuthStore = defineStore('auth', () => {
     return res.data.accessToken
   }
 
+  async function updateProfile(data: {
+    name?:        string
+    oldPassword?: string
+    newPassword?: string
+  }): Promise<AuthUser> {
+    const res = await apiClient.put<AuthUser>('/auth/profile', data)
+    if (user.value) {
+      user.value = { ...user.value, ...res.data }
+      localStorage.setItem(USER_KEY, JSON.stringify(user.value))
+    }
+    return res.data
+  }
+
   return {
     user,
     accessToken,
@@ -71,5 +84,6 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     fetchMe,
     refreshToken,
+    updateProfile,
   }
 })

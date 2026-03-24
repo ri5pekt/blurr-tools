@@ -26,11 +26,11 @@ export interface ShopifyRefund {
 
 export interface ShopifyCustomer {
   id:         number
-  first_name: string
-  last_name:  string
-  email:      string
-  phone:      string
-  created_at: string  // ISO date — present in order response; orders_count is NOT
+  first_name: string | null
+  last_name:  string | null
+  email:      string | null
+  phone:      string | null
+  created_at: string
 }
 
 export interface ShopifyOrder {
@@ -50,7 +50,12 @@ export interface ShopifyOrder {
     shop_money?: { amount: string }
   }
   currency:           string
+  gateway?:           string
+  phone?:             string
   customer?:          ShopifyCustomer
+  billing_address?: {
+    phone?: string
+  }
   shipping_address?:  {
     name?:          string
     address1?:      string
@@ -61,6 +66,7 @@ export interface ShopifyOrder {
     zip?:           string
     country?:       string
     country_code?:  string
+    phone?:         string
   }
   line_items:   ShopifyLineItem[]
   refunds:      ShopifyRefund[]
@@ -160,6 +166,95 @@ const ORDERS_FIELDS = [
   'customer', 'shipping_address',
   'line_items', 'refunds', 'tags', 'note',
 ].join(',')
+
+const PRIORITY_ORDERS_FIELDS = [
+  'id', 'name', 'email', 'created_at', 'financial_status',
+  'total_price', 'subtotal_price', 'total_tax', 'total_discounts',
+  'total_shipping_price_set', 'currency', 'gateway', 'phone',
+  'customer', 'billing_address', 'shipping_address',
+  'line_items', 'refunds', 'tags',
+].join(',')
+
+/**
+ * Fetches all orders in a date range (YYYY-MM-DD to YYYY-MM-DD), all at once.
+ * Includes extra fields needed for Priority export (gateway, phone, billing_address).
+ */
+export async function fetchOrdersForPriorityRange(dateFrom: string, dateTo: string): Promise<ShopifyOrder[]> {
+  const token = await getAccessToken()
+
+  const startIso = `${dateFrom}T00:00:00Z`
+  const endIso   = `${dateTo}T23:59:59Z`
+
+  const orders: ShopifyOrder[] = []
+  let pageInfo: string | null = null
+  let firstPage = true
+
+  while (firstPage || pageInfo !== null) {
+    let path: string
+
+    if (firstPage) {
+      const params = new URLSearchParams({
+        created_at_min: startIso,
+        created_at_max: endIso,
+        status:         'any',
+        limit:          '250',
+        fields:         PRIORITY_ORDERS_FIELDS,
+      })
+      path      = `/orders.json?${params.toString()}`
+      firstPage = false
+    } else {
+      path = `/orders.json?page_info=${pageInfo!}&limit=250`
+    }
+
+    const res = await shopifyFetch(path, token)
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Shopify orders fetch failed (${res.status}): ${text}`)
+    }
+
+    const data = await res.json() as { orders: ShopifyOrder[] }
+    orders.push(...data.orders)
+
+    const link      = res.headers.get('Link') ?? ''
+    const nextMatch = link.match(/<[^>]*[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/)
+    pageInfo = nextMatch ? decodeURIComponent(nextMatch[1]) : null
+  }
+
+  return orders
+}
+
+/**
+ * Fetches specific orders by their Shopify IDs.
+ * Batches requests in groups of 250 to stay within Shopify limits.
+ */
+export async function fetchOrdersByIds(orderIds: (string | number)[]): Promise<ShopifyOrder[]> {
+  const token = await getAccessToken()
+  const all: ShopifyOrder[] = []
+
+  for (let i = 0; i < orderIds.length; i += 250) {
+    const batch = orderIds.slice(i, i + 250)
+    const params = new URLSearchParams({
+      ids:    batch.join(','),
+      status: 'any',
+      limit:  '250',
+      fields: PRIORITY_ORDERS_FIELDS,
+    })
+    const path = `/orders.json?${params.toString()}`
+
+    const res = await shopifyFetch(path, token)
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Shopify orders fetch failed (${res.status}): ${text}`)
+    }
+
+    const data = await res.json() as { orders: ShopifyOrder[] }
+    all.push(...data.orders)
+  }
+
+  return all
+}
 
 /**
  * Fetches all orders created on the given date (YYYY-MM-DD).

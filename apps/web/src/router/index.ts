@@ -33,8 +33,21 @@ const router = createRouter({
           name:      'daily-orders',
           component: () => import('../views/DailyOrdersExportView.vue'),
         },
-        // Phase 5
-        // { path: 'settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
+        {
+          path:      'priority-export',
+          name:      'priority-export',
+          component: () => import('../views/PriorityExportView.vue'),
+        },
+        {
+          path:      'settings',
+          name:      'settings',
+          component: () => import('../views/SettingsView.vue'),
+        },
+        {
+          path:      'profile',
+          name:      'profile',
+          component: () => import('../views/ProfileView.vue'),
+        },
 
         { path: ':pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFoundView.vue') },
       ],

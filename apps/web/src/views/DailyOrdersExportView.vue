@@ -48,30 +48,23 @@
         <i class="pi pi-exclamation-triangle" />
         {{ triggerError }}
       </div>
-
-      <div v-if="triggeredCount !== null" class="alert alert-success">
-        <i class="pi pi-check-circle" />
-        {{ triggeredCount === 1
-          ? `Export job queued for ${triggeredDateFrom}.`
-          : `${triggeredCount} export jobs queued for ${triggeredDateFrom} → ${triggeredDateTo}.`
-        }}
-        Job history will update below as they run.
-      </div>
     </section>
 
     <!-- ─── Active job status (latest triggered job) ──────────────────── -->
 
-    <section v-if="latestJobId" class="panel">
-      <div class="panel-head">
-        <h2>Latest Job</h2>
-      </div>
-      <div class="panel-body">
-        <JobStatusCard v-if="latestJob" :job="latestJob" />
-        <div v-else class="loading-row">
-          <i class="pi pi-spin pi-spinner" /> Loading…
+    <Transition name="panel-appear">
+      <section v-if="latestJobId" class="panel">
+        <div class="panel-head">
+          <h2>Latest Job</h2>
         </div>
-      </div>
-    </section>
+        <div class="panel-body">
+          <JobStatusCard v-if="latestJob" :job="latestJob" />
+          <div v-else class="loading-row">
+            <i class="pi pi-spin pi-spinner" /> Loading…
+          </div>
+        </div>
+      </section>
+    </Transition>
 
     <!-- ─── Scheduled Export ──────────────────────────────────────────── -->
 
@@ -167,11 +160,6 @@
           <i class="pi pi-exclamation-triangle" />
           {{ scheduleError }}
         </div>
-
-        <div v-if="scheduleSaved" class="alert alert-success">
-          <i class="pi pi-check-circle" />
-          Schedule saved. Changes take effect within 5 minutes.
-        </div>
       </div>
     </section>
 
@@ -193,12 +181,14 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import DatePicker from 'primevue/datepicker'
 import { apiClient } from '../api/client.js'
 import { useAuthStore } from '../stores/auth.js'
+import { useToast } from '../composables/useToast.js'
 import type { Job, ScheduledExport } from '@blurr-tools/types'
 import JobStatusCard from '../components/JobStatusCard.vue'
 import JobLogsPanel from '../components/JobLogsPanel.vue'
 
 const auth        = useAuthStore()
 const queryClient = useQueryClient()
+const toast       = useToast()
 const isAdmin     = computed(() => auth.user?.role === 'admin')
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
@@ -242,28 +232,28 @@ const canExport = computed(() => !!dateFrom.value && !!dateTo.value)
 
 // ─── Trigger export ──────────────────────────────────────────────────────────
 
-const isTriggering    = ref(false)
-const triggerError    = ref<string | null>(null)
-const triggeredCount  = ref<number | null>(null)
-const triggeredDateFrom = ref('')
-const triggeredDateTo   = ref('')
-const latestJobId     = ref<string | null>(null)
+const isTriggering = ref(false)
+const triggerError = ref<string | null>(null)
+const latestJobId  = ref<string | null>(null)
 
 async function triggerExport() {
   if (!canExport.value || isTriggering.value) return
-  isTriggering.value   = true
-  triggerError.value   = null
-  triggeredCount.value = null
+  isTriggering.value = true
+  triggerError.value = null
 
   try {
     const res = await apiClient.post<{ jobIds: string[]; count: number }>(
       '/features/daily-orders/export',
       { dateFrom: dateFrom.value, dateTo: dateTo.value },
     )
-    latestJobId.value       = res.data.jobIds[0] ?? null
-    triggeredCount.value    = res.data.count
-    triggeredDateFrom.value = dateFrom.value
-    triggeredDateTo.value   = dateTo.value
+    latestJobId.value = res.data.jobIds[0] ?? null
+    const n = res.data.count
+    toast.info(
+      n === 1 ? 'Export queued' : `${n} exports queued`,
+      n === 1
+        ? `Processing orders for ${dateFrom.value}…`
+        : `Processing orders for ${dateFrom.value} → ${dateTo.value}…`,
+    )
     queryClient.invalidateQueries({ queryKey: ['jobs', 'daily_orders_export'] })
   } catch (err: any) {
     triggerError.value = err.response?.data?.error ?? 'Failed to trigger export'
@@ -273,6 +263,8 @@ async function triggerExport() {
 }
 
 // ─── Latest job polling ──────────────────────────────────────────────────────
+
+const notifiedJobId = ref<string | null>(null)
 
 const { data: latestJob } = useQuery({
   queryKey:  computed(() => ['job', latestJobId.value]),
@@ -288,7 +280,21 @@ const { data: latestJob } = useQuery({
 })
 
 watch(latestJob, (job) => {
-  if (job && (job.status === 'completed' || job.status === 'failed')) {
+  if (!job || job.id === notifiedJobId.value) return
+
+  if (job.status === 'completed') {
+    notifiedJobId.value = job.id
+    const count = typeof job.result?.ordersCount === 'number' ? job.result.ordersCount : null
+    toast.success(
+      'Export complete',
+      count !== null
+        ? `${count} orders written to Google Sheets`
+        : 'Export finished successfully',
+    )
+    queryClient.invalidateQueries({ queryKey: ['jobs', 'daily_orders_export'] })
+  } else if (job.status === 'failed') {
+    notifiedJobId.value = job.id
+    toast.error('Export failed', job.errorMessage ?? 'An error occurred during export')
     queryClient.invalidateQueries({ queryKey: ['jobs', 'daily_orders_export'] })
   }
 })
@@ -301,7 +307,6 @@ const scheduleTimezone = ref('America/New_York')
 const isSavingSchedule = ref(false)
 const togglingEnabled  = ref(false)
 const scheduleError    = ref<string | null>(null)
-const scheduleSaved    = ref(false)
 
 // 12-hour hour options
 const hourOptions = Array.from({ length: 24 }, (_, i) => {
@@ -351,8 +356,14 @@ async function saveSchedule(enabled?: boolean) {
 
     await apiClient.put('/features/daily-orders/schedule', body)
     queryClient.invalidateQueries({ queryKey: ['schedule', 'daily_orders_export'] })
-    scheduleSaved.value = true
-    setTimeout(() => { scheduleSaved.value = false }, 4000)
+    if (enabled !== undefined && enabled !== schedule.value?.enabled) {
+      toast.success(
+        enabled ? 'Schedule enabled' : 'Schedule disabled',
+        'Changes take effect within 5 minutes.',
+      )
+    } else {
+      toast.success('Schedule saved', 'Changes take effect within 5 minutes.')
+    }
   } catch (err: any) {
     scheduleError.value = err.response?.data?.error ?? 'Failed to save schedule'
   } finally {
@@ -696,6 +707,22 @@ async function saveSchedule(enabled?: boolean) {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+/* ─── Latest Job panel transition ──────────────────────────────────── */
+
+.panel-appear-enter-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.panel-appear-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.panel-appear-enter-from,
+.panel-appear-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 /* ─── Responsive ─────────────────────────────────────────────────────── */

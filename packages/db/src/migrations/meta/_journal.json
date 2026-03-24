@@ -15,6 +15,13 @@
       "when": 1774353270358,
       "tag": "0001_wealthy_mentallo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774900000000,
+      "tag": "0002_add_priority_export",
+      "breakpoints": true
     }
   ]
 }

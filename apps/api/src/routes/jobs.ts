@@ -18,7 +18,7 @@ export async function jobsRoutes(fastify: FastifyInstance) {
   }, async (request) => {
     const q = listQuerySchema.parse(request.query)
 
-    const where = q.feature ? eq(jobs.feature, q.feature as 'daily_orders_export') : undefined
+    const where = q.feature ? eq(jobs.feature, q.feature as 'daily_orders_export' | 'priority_export') : undefined
 
     const [jobsList, totalResult] = await Promise.all([
       db

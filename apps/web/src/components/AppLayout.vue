@@ -55,7 +55,7 @@
         </div>
 
         <div class="header-right">
-          <div class="user-badge">
+          <RouterLink to="/app/profile" class="user-badge" title="My Profile">
             <div class="user-avatar" :style="{ background: avatarColor }">
               {{ initials }}
             </div>
@@ -63,7 +63,7 @@
               <span class="user-name">{{ auth.user?.name }}</span>
               <span class="user-role">{{ auth.user?.role }}</span>
             </div>
-          </div>
+          </RouterLink>
           <button class="logout-btn" title="Sign out" @click="handleLogout">
             <i class="pi pi-sign-out" />
           </button>
@@ -77,6 +77,9 @@
 
     </div>
   </div>
+
+  <!-- Global toast notifications -->
+  <ToastNotifications />
 </template>
 
 <script setup lang="ts">
@@ -84,6 +87,7 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { APP_VERSION } from '../config/version.js'
+import ToastNotifications from './ToastNotifications.vue'
 
 const auth   = useAuthStore()
 const route  = useRoute()
@@ -100,27 +104,47 @@ interface NavItem {
   exact?: boolean
 }
 
-const navGroups = [
-  {
-    label: '',
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+const navGroups = computed<NavGroup[]>(() => {
+  const groups: NavGroup[] = [
+    {
+      label: '',
+      items: [
+        { to: '/app',      label: 'Dashboard', icon: 'pi-home', exact: true },
+        { to: '/app/logs', label: 'Logs',      icon: 'pi-list' },
+      ],
+    },
+    {
+      label: 'Exports',
+      items: [
+        { to: '/app/daily-orders',    label: 'Daily Orders', icon: 'pi-calendar' },
+        { to: '/app/priority-export', label: 'Priority Export', icon: 'pi-file-export' },
+      ],
+    },
+  ]
+
+  if (auth.user?.role === 'admin') {
+    groups.push({
+      label: 'Admin',
+      items: [
+        { to: '/app/settings', label: 'Settings', icon: 'pi-cog' },
+      ],
+    })
+  }
+
+  groups.push({
+    label: 'Account',
     items: [
-      { to: '/app',      label: 'Dashboard', icon: 'pi-home', exact: true },
-      { to: '/app/logs', label: 'Logs',      icon: 'pi-list' },
-    ] as NavItem[],
-  },
-  {
-    label: 'Exports',
-    items: [
-      { to: '/app/daily-orders', label: 'Daily Orders', icon: 'pi-calendar' },
-    ] as NavItem[],
-  },
-  {
-    label: 'Admin',
-    items: [
-      { to: '/app/settings', label: 'Settings', icon: 'pi-cog' },
-    ] as NavItem[],
-  },
-]
+      { to: '/app/profile', label: 'Profile', icon: 'pi-user' },
+    ],
+  })
+
+  return groups
+})
 
 function isNavActive(item: NavItem): boolean {
   if (item.exact) return route.path === item.to
@@ -334,6 +358,15 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   gap: 0.625rem;
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+  margin: -0.25rem -0.5rem;
+  transition: background 0.15s;
+}
+
+.user-badge:hover {
+  background: #f3f4f6;
 }
 
 .user-avatar {

@@ -13,7 +13,7 @@ export interface AuthUser {
 
 export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 
-export type FeatureKey = 'daily_orders_export'
+export type FeatureKey = 'daily_orders_export' | 'priority_export'
 
 export interface Job {
   id: string

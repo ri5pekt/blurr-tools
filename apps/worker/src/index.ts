@@ -1,6 +1,7 @@
 import './env.js'
 import { connection } from './queues.js'
 import { registerDailyOrdersProcessor } from './processors/daily-orders.js'
+import { registerPriorityExportProcessor } from './processors/priority-export.js'
 import { startScheduler } from './scheduler.js'
 
 connection.on('connect', () => {
@@ -11,7 +12,8 @@ connection.on('error', (err: Error) => {
   console.error('[worker] Redis error:', err.message)
 })
 
-const dailyOrdersWorker = registerDailyOrdersProcessor()
+const dailyOrdersWorker   = registerDailyOrdersProcessor()
+const priorityExportWorker = registerPriorityExportProcessor()
 
 await startScheduler()
 
@@ -21,6 +23,7 @@ async function shutdown(signal: string) {
   console.log(`[worker] ${signal} received, shutting down...`)
   try {
     await dailyOrdersWorker.close()
+    await priorityExportWorker.close()
     await connection.quit()
     console.log('[worker] Shutdown complete.')
     process.exit(0)
