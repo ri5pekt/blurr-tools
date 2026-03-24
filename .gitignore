@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.vite/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Drizzle
+packages/db/src/migrations/*.sql
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+
+# Docker
+docker-compose.override.yml
+
+# Secrets / credentials
+*.json.key
+google-sa-key.json
+credentials/
