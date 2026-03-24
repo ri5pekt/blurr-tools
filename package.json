@@ -1,0 +1,31 @@
+{
+  "name": "blurr-tools",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @blurr-tools/api dev",
+    "dev:worker": "pnpm --filter @blurr-tools/worker dev",
+    "dev:web": "pnpm --filter @blurr-tools/web dev",
+    "build": "pnpm --filter @blurr-tools/types build && pnpm --filter @blurr-tools/db build && pnpm --filter @blurr-tools/api build && pnpm --filter @blurr-tools/web build && pnpm --filter @blurr-tools/worker build",
+    "db:generate": "pnpm --filter @blurr-tools/db generate",
+    "db:migrate": "pnpm --filter @blurr-tools/db migrate",
+    "db:studio": "pnpm --filter @blurr-tools/db studio",
+    "db:seed": "pnpm --filter @blurr-tools/api seed"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "argon2",
+      "esbuild",
+      "msgpackr-extract",
+      "vue-demi"
+    ]
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

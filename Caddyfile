@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────────────────
+#  Production — replace {$DOMAIN} with your actual domain
+#  Caddy auto-provisions TLS via Let's Encrypt
+# ─────────────────────────────────────────────────────────
+{$DOMAIN} {
+  tls {$CADDY_EMAIL}
+
+  # API — proxy to Fastify
+  handle /api/* {
+    reverse_proxy api:3000
+  }
+
+  # Frontend — proxy to nginx serving the Vue build
+  handle {
+    reverse_proxy web:80
+  }
+
+  # Security headers
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+
+  encode gzip
+  log {
+    output stdout
+    format json
+  }
+}
+
+# ─────────────────────────────────────────────────────────
+#  Uncomment below for local HTTP-only testing
+#  (comment out the block above)
+# ─────────────────────────────────────────────────────────
+# :80 {
+#   handle /api/* {
+#     reverse_proxy api:3000
+#   }
+#   handle {
+#     reverse_proxy web:80
+#   }
+# }

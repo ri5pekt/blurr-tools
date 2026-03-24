@@ -1,0 +1,45 @@
+# Development — runs only postgres and redis in Docker.
+# Node apps (api, worker, web) run natively on the host with pnpm dev.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   pnpm dev:api    (terminal 1)
+#   pnpm dev:worker (terminal 2)
+#   pnpm dev:web    (terminal 3)
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-blurrtools}
+      POSTGRES_USER: ${POSTGRES_USER:-blurrtools}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-blurrtools} -d ${POSTGRES_DB:-blurrtools}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_dev_data:/data
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:

@@ -81,6 +81,23 @@ Mirrors `ob-inventory`'s `AppLayout.vue`. Structure:
 - **Text:** white
 - **Sections:** can be grouped (e.g. "Exports", "Settings")
 - **Items:** icon (PrimeIcons) + label + `RouterLink`
+- **Brand area (top of sidebar):**
+  ```
+  ┌──────────────────────┐
+  │   [logo]             │
+  │   Blurr Tools        │
+  │   v0.1.0             │  ← from apps/web/src/config/version.ts
+  └──────────────────────┘
+  ```
+  Version is imported from `version.ts` and never hardcoded in the template:
+  ```typescript
+  // apps/web/src/config/version.ts
+  export const APP_VERSION = '0.1.0'
+  ```
+  ```vue
+  <!-- AppLayout.vue -->
+  <span class="app-version">v{{ APP_VERSION }}</span>
+  ```
 
 ### Header
 - **Background:** white
