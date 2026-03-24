@@ -1,15 +1,29 @@
 import './env.js'
+import { migrate } from 'drizzle-orm/postgres-js/migrator'
+import { createDb } from '@blurr-tools/db'
+import { env } from './env.js'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
 import Fastify from 'fastify'
 import fastifyJwt from '@fastify/jwt'
 import fastifyCookie from '@fastify/cookie'
 import fastifyCors from '@fastify/cors'
 import fastifyHelmet from '@fastify/helmet'
-import { env } from './env.js'
 import { authRoutes } from './routes/auth.js'
 import { usersRoutes } from './routes/users.js'
 import { jobsRoutes } from './routes/jobs.js'
 import { logsRoutes } from './routes/logs.js'
 import { dailyOrdersRoutes } from './routes/features/daily-orders.js'
+
+// ─── Run DB migrations before starting the server ────────────────────────────
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const migrationsFolder = join(__dirname, '../../packages/db/src/migrations')
+
+{
+  const migrationDb = createDb(env.DATABASE_URL)
+  await migrate(migrationDb, { migrationsFolder })
+}
 
 const fastify = Fastify({
   logger: env.NODE_ENV === 'development'

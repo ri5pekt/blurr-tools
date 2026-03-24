@@ -46,9 +46,10 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-COPY --from=builder /app/apps/api/dist         ./apps/api/dist
-COPY --from=builder /app/packages/db/dist      ./packages/db/dist
-COPY --from=builder /app/packages/types/dist   ./packages/types/dist
+COPY --from=builder /app/apps/api/dist              ./apps/api/dist
+COPY --from=builder /app/packages/db/dist           ./packages/db/dist
+COPY --from=builder /app/packages/types/dist        ./packages/types/dist
+COPY --from=builder /app/packages/db/src/migrations ./packages/db/src/migrations
 
 COPY --from=deps /app/node_modules             ./node_modules
 COPY --from=deps /app/apps/api/node_modules    ./apps/api/node_modules

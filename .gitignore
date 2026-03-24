@@ -12,8 +12,8 @@ build/
 .env.local
 .env.production
 
-# Drizzle
-packages/db/src/migrations/*.sql
+# Drizzle (migration SQL files are committed so the production container can run them)
+# packages/db/src/migrations/*.sql
 
 # Logs
 *.log
@@ -34,3 +34,8 @@ docker-compose.override.yml
 *.json.key
 google-sa-key.json
 credentials/
+
+# Deploy scripts (contain server passwords)
+deploy/deploy.py
+deploy/check_server.py
+deploy/read_nginx.py
