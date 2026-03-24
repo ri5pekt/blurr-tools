@@ -3,7 +3,7 @@ import { systemLogs } from './schema/index.js'
 
 type LogLevel  = 'info' | 'warning' | 'error'
 type LogSource = 'api' | 'worker' | 'scheduler' | 'system'
-type Feature   = 'daily_orders_export'
+type Feature   = 'daily_orders_export' | 'priority_export'
 
 export interface LogInput {
   level:    LogLevel
