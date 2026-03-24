@@ -52,19 +52,85 @@ All services run as containers. Caddy handles TLS automatically via Let's Encryp
 postgres  ← api, worker
 redis     ← api, worker
 api       ← caddy (proxied)
-web       ← caddy (proxied)
+web       ← caddy (proxied)   ← nginx container serving built SPA
 worker    (no incoming traffic, consumes queue)
 caddy     (public-facing, port 80 + 443)
 ```
 
-### Dev (`docker-compose.dev.yml`)
-Only `postgres` and `redis` run in Docker. Everything else runs on the host:
+`apps/web/Dockerfile` — two-stage build:
+1. **Build stage:** `node:22-alpine` installs deps and runs `vite build` → outputs to `dist/`
+2. **Serve stage:** `nginx:alpine` copies `dist/` and serves static files; `/api/*` proxied to `api:3000` via `nginx.conf`
 
-```bash
-pnpm dev:api     # Fastify with ts-node-dev, port 3000
-pnpm dev:web     # Vite dev server, port 5173 (proxies /api → localhost:3000)
-pnpm dev:worker  # Worker with ts-node-dev
+---
+
+### Dev (`docker-compose.dev.yml`)
+
+**Only infrastructure runs in Docker** — postgres and redis. Everything else runs on the host machine directly. This gives instant HMR, native TypeScript compilation, and no rebuild wait.
+
 ```
+┌─────────────────────────────────────────────┐
+│  HOST MACHINE                               │
+│                                             │
+│  pnpm dev:web    → Vite dev server :5173    │
+│    HMR, instant reload, Vue devtools        │
+│    proxies /api  → localhost:3000           │
+│                                             │
+│  pnpm dev:api    → Fastify :3000            │
+│    ts-node-dev, restarts on file change     │
+│                                             │
+│  pnpm dev:worker → BullMQ worker            │
+│    ts-node-dev, restarts on file change     │
+│                                             │
+├─────────────────────────────────────────────┤
+│  DOCKER (docker-compose.dev.yml)            │
+│                                             │
+│  postgres :5433 → :5432                     │
+│  redis    :6380 → :6379                     │
+└─────────────────────────────────────────────┘
+```
+
+**Dev startup sequence:**
+```bash
+# 1. Start infrastructure
+docker compose -f docker-compose.dev.yml up -d
+
+# 2. Run DB migrations (first time or after schema changes)
+pnpm db:migrate
+
+# 3. Start all app processes (in separate terminals or via concurrently)
+pnpm dev:api
+pnpm dev:web
+pnpm dev:worker
+```
+
+**Vite proxy config (`apps/web/vite.config.ts`):**
+```typescript
+server: {
+  port: 5173,
+  proxy: {
+    '/api': {
+      target: 'http://localhost:3000',
+      changeOrigin: true,
+    },
+  },
+}
+```
+This means the browser always talks to `localhost:5173`. Vite forwards any `/api/*` request to the Fastify server on `:3000`. No CORS issues, same origin from the browser's perspective. The `withCredentials: true` on Axios still works because the cookie is scoped to the same origin (`localhost:5173` → forwarded as `localhost:5173`).
+
+**Dev `.env` differences vs production:**
+```bash
+# Dev — services on localhost with remapped ports
+DATABASE_URL=postgresql://blurrtools:blurrtools@localhost:5433/blurrtools
+REDIS_URL=redis://localhost:6380
+NODE_ENV=development
+
+# Production — services on Docker network by service name
+DATABASE_URL=postgresql://blurrtools:blurrtools@postgres:5432/blurrtools
+REDIS_URL=redis://redis:6379
+NODE_ENV=production
+```
+
+Keep a `.env` file at the repo root for dev. The `.env` is git-ignored. `.env.example` documents all required variables.
 
 ---
 
