@@ -18,7 +18,8 @@ import { dailyOrdersRoutes } from './routes/features/daily-orders.js'
 // ─── Run DB migrations before starting the server ────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const migrationsFolder = join(__dirname, '../../packages/db/src/migrations')
+// __dirname = /app/apps/api/dist  →  ../../../ = /app
+const migrationsFolder = join(__dirname, '../../../packages/db/src/migrations')
 
 {
   const migrationDb = createDb(env.DATABASE_URL)
