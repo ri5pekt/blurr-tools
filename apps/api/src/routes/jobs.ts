@@ -51,7 +51,7 @@ export async function jobsRoutes(fastify: FastifyInstance) {
     return {
       jobs: jobsList.map(j => ({
         ...j,
-        createdBy: j.createdBy.id !== null ? j.createdBy : null,
+        createdBy: j.createdBy?.id !== null ? j.createdBy : null,
       })),
       total: totalResult[0]?.total ?? 0,
     }
@@ -100,7 +100,7 @@ export async function jobsRoutes(fastify: FastifyInstance) {
 
     return {
       ...job,
-      createdBy: job.createdBy.id !== null ? job.createdBy : null,
+      createdBy: job.createdBy?.id !== null ? job.createdBy : null,
     }
   })
 
