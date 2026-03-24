@@ -233,9 +233,11 @@ JWT_REFRESH_EXPIRES_IN=30d
 NODE_ENV=development
 API_PORT=3000
 
-# Shopify
-SHOPIFY_STORE_URL=https://your-store.myshopify.com
-SHOPIFY_ADMIN_API_TOKEN=shpat_xxx
+# Shopify — custom app, client credentials grant
+SHOPIFY_SHOP=your-store.myshopify.com     # subdomain only, no https://
+SHOPIFY_CLIENT_ID=efab04b3xxxxxxxxxxxxxxxx
+SHOPIFY_CLIENT_SECRET=shpss_xxxxxxxxxxxxxxxx
+# Store timezone is fetched automatically from GET /shop.json on first use
 
 # Google Sheets
 GOOGLE_SERVICE_ACCOUNT_KEY_PATH=/run/secrets/google-key.json

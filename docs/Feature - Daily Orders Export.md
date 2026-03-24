@@ -160,32 +160,54 @@ BullMQ job processor. Called with `{ jobId, date }`.
 ```
 1. Update job row: status = 'running', startedAt = now()
 
-2. Build Shopify API request
-   - Endpoint: GET /admin/api/2024-01/orders.json
-   - Params: created_at_min, created_at_max (full day in store timezone)
-   - Headers: X-Shopify-Access-Token: <SHOPIFY_ADMIN_API_TOKEN>
-   - Paginate via `page_info` cursor (Shopify cursor-based pagination)
-   - Update progress % as pages load
+2. Authenticate with Shopify
+   - POST to /admin/oauth/access_token with client_credentials grant
+   - Cache token in memory, reuse until 60s before expiry
+   - progress → 5%
 
-3. Transform orders to rows
-   - Map each order to a flat row: order id, order number, date, customer name,
-     email, total, line items summary, payment status, fulfillment status, etc.
-   - (Exact columns defined in column mapping section below)
+3. Get store timezone
+   - GET /admin/api/2026-01/shop.json → shop.iana_timezone
+   - Cache timezone in DB or memory for subsequent runs
+   - progress → 10%
 
-4. Write to Google Sheets
-   - Clear existing tab content (or append, configurable)
-   - Write header row
-   - Write data rows in batch
-   - Update progress to 90%
+4. Compute UTC date window for the requested local day
+   - Convert date (e.g. "2026-03-23") to UTC range using store IANA timezone
+   - e.g. America/New_York → 2026-03-23T05:00:00Z to 2026-03-24T04:59:59Z
 
-5. Update job row: 
+5. Fetch NEW orders (created on that local day)
+   - GET /orders.json?status=any&limit=250&created_at_min=...&created_at_max=...&fields=...
+   - Paginate via Link header rel="next" (full URL in header, follow until no next)
+   - Update progress as pages complete
+   - progress → 50%
+
+6. Fetch REFUNDED orders (refunds processed on that local day, on any order)
+   - GET /orders.json?status=any&limit=250&updated_at_min=...&updated_at_max=...&fields=...
+   - updated_at window = 3 days from local midnight (Shopify updated_at lags ~24h after refund)
+   - Filter client-side: keep only orders where any refund.created_at == target local date
+   - Exclude orders already in step 5 (same-day orders) to avoid duplication
+   - progress → 70%
+
+7. Flatten and compute metrics
+   - For each new order: compute gross_sales, discounts, refund_total, net_revenue,
+     sold_units, customer_type (new/returning via customer.orders_count)
+   - For refunded orders: compute refunds_on_date (only refund txns from that local day)
+   - progress → 80%
+
+8. Write to Google Sheets
+   - Open spreadsheet by DAILY_ORDERS_SPREADSHEET_ID
+   - Find or create tab named after the date (e.g. "2026-03-23")
+   - Clear tab, write header row, write all data rows in one batch call
+   - progress → 95%
+
+9. Update job row:
    - status = 'completed'
-   - result = { ordersCount, sheetUrl, tabName }
+   - result = { ordersCount, refundedOrdersCount, sheetUrl, tabName }
    - completedAt = now()
    - progress = 100
 
 On any error:
    - Update job row: status = 'failed', errorMessage = error.message, completedAt = now()
+   - Write error log via logger
    - Re-throw (BullMQ handles retry with backoff)
 ```
 
@@ -201,30 +223,114 @@ defaultJobOptions: {
 
 ## Shopify Integration
 
-### API Details
-- **Base URL:** `https://{SHOPIFY_STORE_URL}/admin/api/2024-01`
-- **Auth:** `X-Shopify-Access-Token: {SHOPIFY_ADMIN_API_TOKEN}`
-- **Orders endpoint:** `GET /orders.json`
+### Authentication — Client Credentials Flow
 
-### Date Filtering
-Shopify orders are filtered by `created_at_min` and `created_at_max` using the **store's timezone** (configured in Shopify — usually matches the business timezone). The worker computes full-day boundaries:
+Shopify uses a **client credentials** grant (server-to-server). There is no static "Admin API token" — instead, a short-lived access token is obtained by exchanging `client_id` + `client_secret`.
+
+```typescript
+// POST https://{SHOPIFY_SHOP}.myshopify.com/admin/oauth/access_token
+// Body (form-encoded): grant_type=client_credentials&client_id=...&client_secret=...
+// Response: { access_token, expires_in (seconds) }
+// Use: X-Shopify-Access-Token: <access_token> on all API calls
+```
+
+**Token caching:** The token is cached in memory and reused. It is refreshed automatically when it is within 60 seconds of expiry (`expires_in` defaults to 86400s = 24h if not returned).
+
+```typescript
+// apps/worker/src/shopify/client.ts
+let cachedToken: string | null = null
+let tokenExpiresAt = 0
+
+async function getToken(): Promise<string> {
+  if (cachedToken && Date.now() < tokenExpiresAt - 60_000) return cachedToken
+  const res = await fetch(`https://${env.SHOPIFY_SHOP}.myshopify.com/admin/oauth/access_token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: env.SHOPIFY_CLIENT_ID,
+      client_secret: env.SHOPIFY_CLIENT_SECRET,
+    }),
+  })
+  const data = await res.json()
+  cachedToken = data.access_token
+  tokenExpiresAt = Date.now() + (data.expires_in ?? 86400) * 1000
+  return cachedToken
+}
+```
+
+### API Version and Base URL
 
 ```
-created_at_min = 2026-03-23T00:00:00-05:00
-created_at_max = 2026-03-23T23:59:59-05:00
+API Version: 2026-01
+Base URL:    https://{SHOPIFY_SHOP}.myshopify.com/admin/api/2026-01
+```
+
+### Store Timezone
+
+Fetched once from the Shopify store settings and cached:
+
+```typescript
+// GET /admin/api/2026-01/shop.json → body.shop.iana_timezone
+// e.g. "America/New_York"
+```
+
+Used to convert the requested `date` string (e.g. `"2026-03-23"`) into the correct UTC boundaries for API filtering.
+
+### Date Filtering
+
+```typescript
+// For date = "2026-03-23", storeTimezone = "America/New_York":
+const start = new Date('2026-03-23T00:00:00').toLocaleString('en-US', { timeZone: storeTimezone })
+// created_at_min = 2026-03-23T05:00:00+00:00  (UTC equivalent of midnight ET)
+// created_at_max = 2026-03-24T04:59:59+00:00  (UTC equivalent of 23:59:59 ET)
 ```
 
 ### Pagination
-Shopify uses cursor-based pagination (Link header with `page_info`). The worker iterates all pages with 250 orders per page.
 
-### Order Fields to Fetch
+Shopify cursor pagination via the **`Link`** response header:
+
 ```
-id, order_number, created_at, email, phone,
-billing_address, shipping_address,
+Link: <https://shop.myshopify.com/admin/api/2026-01/orders.json?page_info=abc123>; rel="next"
+```
+
+The worker follows `rel="next"` URLs sequentially until no next link is returned. Each page: 250 orders (Shopify maximum).
+
+```typescript
+function parseNextUrl(linkHeader: string | null): string | null {
+  if (!linkHeader) return null
+  for (const part of linkHeader.split(',')) {
+    if (part.includes('rel="next"')) {
+      return part.split(';')[0].trim().replace(/[<>]/g, '')
+    }
+  }
+  return null
+}
+```
+
+### Request Fields
+
+The `fields` query parameter limits what Shopify returns (reduces payload size):
+
+```
+id, name, email, created_at, processed_at,
 financial_status, fulfillment_status,
-total_price, subtotal_price, total_tax, total_discounts,
-currency, line_items (name, quantity, price, sku),
-tags, note, customer (id, first_name, last_name)
+total_price, subtotal_price, total_tax,
+total_shipping_price_set, total_discounts,
+currency, customer, shipping_address,
+line_items, refunds, tags, note, source_name
+```
+
+### Rate Limiting
+
+Shopify returns `429 Too Many Requests` when the rate limit is hit. The worker handles this with retry + `Retry-After` header respect:
+
+```typescript
+if (res.status === 429) {
+  const retryAfter = parseInt(res.headers.get('Retry-After') ?? '2', 10)
+  await sleep(retryAfter * 1000)
+  return shopifyGet(path, params)  // retry
+}
 ```
 
 ---
@@ -243,25 +349,40 @@ Service account credentials from env: `GOOGLE_SERVICE_ACCOUNT_KEY_PATH` (path to
 
 ### Column Mapping
 
-| Sheet Column | Shopify Field |
-|-------------|---------------|
-| Order Number | `order_number` |
-| Date | `created_at` (formatted) |
-| Customer Name | `billing_address.first_name + last_name` |
-| Email | `email` |
-| Phone | `phone` |
-| Items | `line_items` joined as "Product x2, Product2 x1" |
-| Subtotal | `subtotal_price` |
-| Discounts | `total_discounts` |
-| Tax | `total_tax` |
-| Total | `total_price` |
-| Currency | `currency` |
-| Payment Status | `financial_status` |
-| Fulfillment Status | `fulfillment_status` |
-| Tags | `tags` |
-| Shopify Order ID | `id` |
+Matches the `flatten_order` output from the reference implementation (`daily_orders.py`):
 
-*(Exact columns can be adjusted — this is the initial set.)*
+| Sheet Column | Source | Notes |
+|-------------|--------|-------|
+| `order_id` | `order.id` | Shopify internal ID |
+| `order_name` | `order.name` | e.g. `#1234` |
+| `channel` | `order.source_name` | e.g. `web`, `pos`, `shopify_draft_orders` |
+| `created_at` | `order.created_at` | ISO timestamp |
+| `refunded_at` | `refund.created_at` (earliest) | comma-separated if multiple dates |
+| `financial_status` | `order.financial_status` | `paid`, `refunded`, `partially_refunded`, etc. |
+| `fulfillment_status` | `order.fulfillment_status` | `fulfilled`, `unfulfilled`, `partial` |
+| `customer_type` | `customer.orders_count` | `new` (=1) or `returning` (>1) |
+| `currency` | `order.currency` | |
+| `gross_sales` | `order.subtotal_price` | post-discount, pre-refund/tax/shipping |
+| `discounts` | `order.total_discounts` | |
+| `refunds` | sum of successful refund transactions | only `kind=refund, status=success` txns |
+| `net_revenue` | `gross_sales - refunds` | |
+| `total_tax` | `order.total_tax` | |
+| `shipping` | `order.total_shipping_price_set.shop_money.amount` | |
+| `total_price` | `order.total_price` | grand total |
+| `sold_units` | sum of `line_item.quantity` | |
+| `customer_first` | `customer.first_name` | |
+| `customer_last` | `customer.last_name` | |
+| `customer_email` | `order.email` or `customer.email` | |
+| `customer_phone` | `customer.phone` | |
+| `ship_city` | `shipping_address.city` | |
+| `ship_province` | `shipping_address.province_code` | |
+| `ship_zip` | `shipping_address.zip` | |
+| `ship_country` | `shipping_address.country_code` | |
+| `line_items` | formatted string | `"Product A x2 @ 29.99; Product B x1 @ 14.99"` |
+| `tags` | `order.tags` | |
+| `note` | `order.note` | newlines replaced with spaces |
+
+**Refund rows (separate sheet tab or appended section):** For refunded orders on the same day, an additional set of rows is written showing the refunded amounts attributed to that date — matching Metorik's date attribution method.
 
 ---
 
@@ -306,14 +427,19 @@ export const dailyOrdersApi = {
 ## Environment Variables Required
 
 ```bash
-SHOPIFY_STORE_URL=your-store.myshopify.com
-SHOPIFY_ADMIN_API_TOKEN=shpat_xxxxxxxxxxxxxxxxxxxx
-SHOPIFY_STORE_TIMEZONE=America/New_York   # used for date boundary calculation
+# Shopify — client credentials (custom app Client ID + Secret)
+SHOPIFY_SHOP=your-store.myshopify.com          # shop subdomain only, no https://
+SHOPIFY_CLIENT_ID=efab04b3xxxxxxxxxxxxxxxx
+SHOPIFY_CLIENT_SECRET=shpss_xxxxxxxxxxxxxxxx
+# Store timezone is auto-fetched from GET /shop.json → shop.iana_timezone
+# No need to set it manually.
 
+# Google Sheets
 GOOGLE_SERVICE_ACCOUNT_KEY_PATH=/run/secrets/google-sa-key.json
-# or
-GOOGLE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
+# or inline JSON string:
+# GOOGLE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
 
+# Daily Orders feature config
 DAILY_ORDERS_SPREADSHEET_ID=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms
 DAILY_ORDERS_SCHEDULE_CRON=0 8 * * *
 DAILY_ORDERS_SCHEDULE_TZ=America/New_York
