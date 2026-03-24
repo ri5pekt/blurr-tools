@@ -46,20 +46,12 @@ const features = [
     description: 'Fetch Shopify orders for a selected date and write them to Google Sheets.',
   },
   {
-    to:          '/app/logs',
-    icon:        'pi-list',
-    iconColor:   '#2563eb',
-    iconBg:      '#eff6ff',
-    name:        'System Logs',
-    description: 'View all actions, job runs, errors, and scheduled triggers in one place.',
-  },
-  {
-    to:          '/app/settings',
-    icon:        'pi-cog',
-    iconColor:   '#4b5563',
-    iconBg:      '#f3f4f6',
-    name:        'Settings',
-    description: 'Manage Shopify credentials, Google Sheets config, users, and scheduled exports.',
+    to:          '/app/priority-export',
+    icon:        'pi-file-export',
+    iconColor:   '#0891b2',
+    iconBg:      '#ecfeff',
+    name:        'Priority Export',
+    description: 'Export Shopify orders to a Priority-compatible TXT file for financial import.',
   },
 ]
 </script>
@@ -92,7 +84,7 @@ const features = [
 
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 1.25rem;
 }
 
@@ -170,12 +162,6 @@ const features = [
 }
 
 /* ─── Responsive ──────────────────────────────────────────────────────── */
-
-@media (max-width: 900px) {
-  .feature-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
 
 @media (max-width: 540px) {
   .feature-grid {
