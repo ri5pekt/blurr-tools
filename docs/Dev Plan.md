@@ -23,6 +23,7 @@ It follows the same product shape as **pfm-tools** (feature cards on a dashboard
 Set up the monorepo, Docker Compose, shared packages, and a working dev environment. No features yet — just the plumbing.
 
 **Deliverables:**
+- Git repo initialized, connected to `https://github.com/ri5pekt/blurr-tools.git`, `main` branch
 - pnpm monorepo with `apps/api`, `apps/web`, `apps/worker`, `packages/db`, `packages/types`
 - Docker Compose (dev + prod)
 - Drizzle + PostgreSQL connected
