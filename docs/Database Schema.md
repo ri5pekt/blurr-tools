@@ -151,12 +151,55 @@ export const scheduledExports = pgTable('scheduled_exports', {
 
 ---
 
+## Logs
+
+### `system_logs`
+
+Centralized log of all system events — job lifecycle, user actions, scheduled triggers, errors. Never deleted. See `docs/Logs System.md` for the full spec.
+
+```typescript
+export const logLevelEnum  = pgEnum('log_level',  ['info', 'warning', 'error'])
+export const logSourceEnum = pgEnum('log_source', ['api', 'worker', 'scheduler', 'system'])
+
+export const systemLogs = pgTable('system_logs', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  level:     logLevelEnum('level').notNull(),
+  source:    logSourceEnum('source').notNull(),
+  feature:   featureEnum('feature'),
+  jobId:     uuid('job_id').references(() => jobs.id, { onDelete: 'set null' }),
+  userId:    uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  action:    text('action').notNull(),     // e.g. 'job.completed', 'user.login'
+  message:   text('message').notNull(),    // human-readable sentence
+  meta:      jsonb('meta'),                // structured extra data (error stack, counts, etc.)
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+```
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID PK | |
+| `level` | enum | `info` / `warning` / `error` |
+| `source` | enum | `api` / `worker` / `scheduler` / `system` |
+| `feature` | enum (nullable) | which feature, if applicable |
+| `job_id` | UUID FK → jobs (nullable) | links to a specific job run |
+| `user_id` | UUID FK → users (nullable) | null for scheduled/system events |
+| `action` | text | short machine-readable key |
+| `message` | text | human-readable description |
+| `meta` | jsonb (nullable) | error stacks, row counts, URLs, etc. |
+| `created_at` | timestamptz | indexed descending for fast pagination |
+
+---
+
 ## Relationships
 
 ```
 users
   └─< refresh_tokens   (user_id → users.id, cascade delete)
   └─< jobs             (created_by → users.id, set null on delete)
+  └─< system_logs      (user_id → users.id, set null on delete)
+
+jobs
+  └─< system_logs      (job_id → jobs.id, set null on delete)
 ```
 
 ---

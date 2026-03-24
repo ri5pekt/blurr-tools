@@ -64,17 +64,21 @@ The authenticated application wrapper: sidebar, header, dashboard home.
 
 ---
 
-### Phase 3 — Jobs Infrastructure
-Shared job system that every feature will reuse. Establishes the pattern once.
+### Phase 3 — Jobs Infrastructure + Logs
+Shared job system and logging layer that every feature will reuse. Establishes the pattern once.
 
 **Deliverables:**
 - `jobs` table in DB (id, feature, status, options JSONB, progress, error_message, timestamps)
 - `scheduled_exports` table (id, feature, name, cron, enabled, options JSONB, timestamps)
+- `system_logs` table in DB — centralized log of all events (see `docs/Logs System.md`)
+- `packages/db/src/logger.ts` — shared `log()` utility used by API and worker
 - API routes: `GET /api/jobs/:id` (poll status), `DELETE /api/jobs/:id` (cancel)
+- API routes: `GET /api/logs` with filters (level, source, feature, search, date range)
 - BullMQ queue setup in `apps/worker`
-- Shared job utilities: create job row, update status/progress, handle failure
+- Shared job utilities: create job row, update status/progress, handle failure, write logs
 - Frontend: `JobStatusCard.vue` reusable component (shows status badge, progress, error, timestamps)
 - Frontend: `JobLogsPanel.vue` reusable component (job history list for a feature, with polling)
+- Frontend: `LogsView.vue` — `/app/logs` screen with filterable log table, row expand, auto-refresh
 
 ---
 
