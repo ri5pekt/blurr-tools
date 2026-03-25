@@ -1,6 +1,7 @@
 import { google } from 'googleapis'
 import { env } from '../env.js'
 import type { ShopifyOrder } from '../shopify/client.js'
+import { getCustomerOrderCounts } from '../shopify/client.js'
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -77,29 +78,30 @@ function computeRefundTotal(order: ShopifyOrder): number {
   return Math.max(byPrice, byTxn)
 }
 
-function aggregateStats(orders: ShopifyOrder[], date: string): DailyStats {
+async function aggregateStats(orders: ShopifyOrder[], date: string): Promise<DailyStats> {
   let grossRevenue    = 0
   let totalRefunds    = 0
   let newCustomers    = 0
   let returningOrders = 0
   let unitsSold       = 0
 
+  // Fetch orders_count for all unique customers in one batch call.
+  // orders_count === 1 means this is their first-ever order → new customer.
+  // Guest checkouts (no customer) are always counted as new.
+  const customerIds    = [...new Set(orders.map(o => o.customer?.id).filter((id): id is number => id != null))]
+  const ordersCounts   = customerIds.length > 0 ? await getCustomerOrderCounts(customerIds) : {}
+
   for (const o of orders) {
     grossRevenue  += parseFloat(o.total_price)
     totalRefunds  += computeRefundTotal(o)
     unitsSold     += o.line_items.reduce((s, li) => s + (li.quantity ?? 0), 0)
 
-    // Shopify omits orders_count in the customer object embedded in order
-    // responses. Use customer.created_at instead:
-    // if the account existed before this order's date → returning customer.
-    const customerCreatedDate = o.customer?.created_at
-      ? o.customer.created_at.slice(0, 10)   // "2026-03-06T..." → "2026-03-06"
-      : null
-    const isReturning = customerCreatedDate !== null && customerCreatedDate < date
+    const count       = o.customer?.id != null ? (ordersCounts[o.customer.id] ?? 0) : 0
+    const isReturning = count > 1
     if (isReturning) {
       returningOrders++
     } else {
-      newCustomers++
+      newCustomers++ // first-ever order, or guest checkout
     }
   }
 
@@ -210,7 +212,7 @@ export async function writeOrdersToSheet(
     )
   }
 
-  const stats = aggregateStats(orders, date)
+  const stats = await aggregateStats(orders, date)
 
   // ISO timestamp for the "Last Update" column (F)
   const lastUpdate = new Date().toISOString().replace('T', ' ').slice(0, 19)

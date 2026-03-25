@@ -258,6 +258,37 @@ export async function fetchOrdersByIds(orderIds: (string | number)[]): Promise<S
 }
 
 /**
+ * Fetches orders_count for a list of customer IDs in one batched request.
+ * Returns a map of { customerId → ordersCount }.
+ * Used to distinguish new customers (count === 1) from returning (count > 1).
+ */
+export async function getCustomerOrderCounts(customerIds: number[]): Promise<Record<number, number>> {
+  const token  = await getAccessToken()
+  const result: Record<number, number> = {}
+
+  // Shopify allows up to 250 IDs per request
+  for (let i = 0; i < customerIds.length; i += 250) {
+    const batch  = customerIds.slice(i, i + 250)
+    const params = new URLSearchParams({
+      ids:    batch.join(','),
+      limit:  '250',
+      fields: 'id,orders_count',
+    })
+    const res = await shopifyFetch(`/customers.json?${params.toString()}`, token)
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Shopify customers fetch failed (${res.status}): ${text}`)
+    }
+    const data = await res.json() as { customers: { id: number; orders_count: number }[] }
+    for (const c of data.customers) {
+      result[c.id] = c.orders_count
+    }
+  }
+
+  return result
+}
+
+/**
  * Fetches all orders created on the given date (YYYY-MM-DD).
  * Uses UTC boundaries: 00:00:00Z – 23:59:59Z.
  * Handles cursor-based pagination automatically.
