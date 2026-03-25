@@ -58,6 +58,25 @@ interface DailyStats {
   unitsSold:         number
 }
 
+function computeRefundTotal(order: ShopifyOrder): number {
+  // Two complementary approaches — take the larger to handle all refund types:
+  // 1. total_price - current_total_price  → catches line-item / full refunds
+  // 2. sum of refund transactions         → catches adjustment-only partial refunds
+  const byPrice = Math.max(
+    0,
+    parseFloat(order.total_price) - parseFloat(order.current_total_price ?? order.total_price),
+  )
+  let byTxn = 0
+  for (const r of order.refunds ?? []) {
+    for (const txn of r.transactions ?? []) {
+      if (txn.kind === 'refund' && txn.status === 'success') {
+        byTxn += parseFloat(txn.amount ?? '0')
+      }
+    }
+  }
+  return Math.max(byPrice, byTxn)
+}
+
 function aggregateStats(orders: ShopifyOrder[], date: string): DailyStats {
   let grossRevenue    = 0
   let totalRefunds    = 0
@@ -66,13 +85,8 @@ function aggregateStats(orders: ShopifyOrder[], date: string): DailyStats {
   let unitsSold       = 0
 
   for (const o of orders) {
-    const gross   = parseFloat(o.total_price)
-    // current_total_price is what Shopify reports after all refunds are applied.
-    // Subtracting it from total_price gives the exact refunded amount without
-    // having to parse nested refund transactions (which are unreliable via fields=).
-    const current = parseFloat(o.current_total_price ?? o.total_price)
-    grossRevenue  += gross
-    totalRefunds  += Math.max(0, gross - current)
+    grossRevenue  += parseFloat(o.total_price)
+    totalRefunds  += computeRefundTotal(o)
     unitsSold     += o.line_items.reduce((s, li) => s + (li.quantity ?? 0), 0)
 
     // Shopify omits orders_count in the customer object embedded in order
