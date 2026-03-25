@@ -345,7 +345,6 @@ async function saveSchedule(enabled?: boolean) {
   isSavingSchedule.value = true
   togglingEnabled.value  = enabled !== undefined && enabled !== schedule.value?.enabled
   scheduleError.value    = null
-  scheduleSaved.value    = false
 
   try {
     const body: Record<string, unknown> = {
