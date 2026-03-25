@@ -34,16 +34,17 @@ export interface ShopifyCustomer {
 }
 
 export interface ShopifyOrder {
-  id:                 number
-  name:               string
-  email:              string
-  created_at:         string
-  processed_at:       string
-  source_name:        string
-  financial_status:   string
-  fulfillment_status: string | null
-  total_price:        string
-  subtotal_price:     string
+  id:                  number
+  name:                string
+  email:               string
+  created_at:          string
+  processed_at:        string
+  source_name:         string
+  financial_status:    string
+  fulfillment_status:  string | null
+  total_price:         string
+  current_total_price: string   // current value after any refunds
+  subtotal_price:      string
   total_tax:          string
   total_discounts:    string
   total_shipping_price_set?: {
@@ -161,7 +162,7 @@ function sleep(ms: number): Promise<void> {
 const ORDERS_FIELDS = [
   'id', 'name', 'email', 'created_at', 'processed_at', 'source_name',
   'financial_status', 'fulfillment_status',
-  'total_price', 'subtotal_price', 'total_tax', 'total_discounts',
+  'total_price', 'current_total_price', 'subtotal_price', 'total_tax', 'total_discounts',
   'total_shipping_price_set', 'currency',
   'customer', 'shipping_address',
   'line_items', 'refunds', 'tags', 'note',
