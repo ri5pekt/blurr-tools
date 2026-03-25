@@ -9,18 +9,18 @@ interface CurrencyMapping {
 
 function getCurrencyMapping(currency: string): CurrencyMapping {
   switch (currency) {
-    case 'USD': return { custCode: '77',     warehouse: 'SbNJ' }
-    case 'EUR': return { custCode: '78',     warehouse: 'SbCA' }
-    case 'AUD': return { custCode: '79',     warehouse: 'SbCA' }
-    case 'CAD': return { custCode: '292',    warehouse: 'SbCA' }
-    case 'GBP': return { custCode: '291',    warehouse: 'SbCA' }
-    case 'ILS': return { custCode: '76',     warehouse: 'Gre'  }
-    case 'BRL': return { custCode: '100001', warehouse: 'SbCA' }
-    case 'MXN': return { custCode: '100002', warehouse: 'SbCA' }
-    case 'KRW': return { custCode: '100003', warehouse: 'SbCA' }
-    case 'JPX': return { custCode: '100004', warehouse: 'SbCA' }
-    case 'JPY': return { custCode: '100005', warehouse: 'SbCA' }
-    default:    return { custCode: '77',     warehouse: 'SbCA' }
+    case 'USD': return { custCode: '1060001', warehouse: 'SbNJ' }
+    case 'EUR': return { custCode: '78',      warehouse: 'SbCA' }
+    case 'AUD': return { custCode: '79',      warehouse: 'SbCA' }
+    case 'CAD': return { custCode: '292',     warehouse: 'SbCA' }
+    case 'GBP': return { custCode: '291',     warehouse: 'SbCA' }
+    case 'ILS': return { custCode: '76',      warehouse: 'Gre'  }
+    case 'BRL': return { custCode: '100001',  warehouse: 'SbCA' }
+    case 'MXN': return { custCode: '100002',  warehouse: 'SbCA' }
+    case 'KRW': return { custCode: '100003',  warehouse: 'SbCA' }
+    case 'JPX': return { custCode: '100004',  warehouse: 'SbCA' }
+    case 'JPY': return { custCode: '100005',  warehouse: 'SbCA' }
+    default:    return { custCode: '1060001', warehouse: 'SbCA' }
   }
 }
 
