@@ -208,7 +208,8 @@ async function handleLogout() {
   width: 38px;
   height: 38px;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.18);
+  background: linear-gradient(135deg, #b842a9, #862f7b);
+  box-shadow: 0 2px 8px rgba(184, 66, 169, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -221,7 +222,7 @@ async function handleLogout() {
 .brand-info {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
 }
 
 .brand-name {
@@ -232,9 +233,16 @@ async function handleLogout() {
 }
 
 .brand-version {
-  font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.5);
-  font-weight: 500;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(184, 66, 169, 0.45);
+  border: 1px solid rgba(184, 66, 169, 0.6);
+  border-radius: 99px;
+  padding: 0.05rem 0.4rem;
+  display: inline-block;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
 }
 
 /* ─── Nav ─────────────────────────────────────────────────────────────── */

@@ -137,6 +137,7 @@ async function handleSubmit() {
   height: 52px;
   border-radius: 12px;
   background: linear-gradient(135deg, #b842a9, #862f7b);
+  box-shadow: 0 4px 14px rgba(184, 66, 169, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -147,16 +148,22 @@ async function handleSubmit() {
 }
 
 .brand-text h1 {
-  margin: 0 0 0.125rem;
+  margin: 0 0 0.25rem;
   font-size: 1.375rem;
   font-weight: 700;
   color: #1a1a1a;
 }
 
 .version {
-  font-size: 0.75rem;
-  color: #9ca3af;
-  font-weight: 500;
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #b842a9;
+  background: rgba(184, 66, 169, 0.08);
+  border: 1px solid rgba(184, 66, 169, 0.2);
+  border-radius: 99px;
+  padding: 0.1rem 0.5rem;
+  letter-spacing: 0.02em;
 }
 
 /* ─── Form ───────────────────────────────────────────────── */

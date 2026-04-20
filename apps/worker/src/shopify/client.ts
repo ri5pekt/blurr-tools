@@ -40,6 +40,7 @@ export interface ShopifyOrder {
   created_at:          string
   processed_at:        string
   source_name:         string
+  cancel_reason:       string | null
   financial_status:    string
   fulfillment_status:  string | null
   total_price:         string
@@ -157,10 +158,72 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+// ─── Store timezone (cached) ──────────────────────────────────────────────────
+
+let cachedStoreTz: string | null = null
+
+/**
+ * Fetches the store's IANA timezone from shop.json and caches it for the
+ * lifetime of the process. Returns 'UTC' as a safe fallback.
+ */
+export async function getStoreTimezone(): Promise<string> {
+  if (cachedStoreTz) return cachedStoreTz
+
+  try {
+    const token = await getAccessToken()
+    const shop  = getShopDomain()
+    const res   = await shopifyFetch('/shop.json', token)
+    if (res.ok) {
+      const data = await res.json() as { shop: { iana_timezone: string } }
+      cachedStoreTz = data.shop.iana_timezone ?? 'UTC'
+    } else {
+      cachedStoreTz = 'UTC'
+    }
+  } catch {
+    cachedStoreTz = 'UTC'
+  }
+
+  return cachedStoreTz
+}
+
+/**
+ * Converts a YYYY-MM-DD date string to UTC ISO boundaries for 00:00:00–23:59:59
+ * in the given IANA timezone.
+ */
+export function localDayToUtcWindow(dateStr: string, ianaTimezone: string): { min: string; max: string } {
+  const [yr, mo, dy] = dateStr.split('-').map(Number)
+
+  // Use noon UTC on that date as a stable reference point to derive the UTC offset,
+  // avoiding any DST edge cases that happen at midnight.
+  const refUtcNoon    = new Date(Date.UTC(yr, mo - 1, dy, 12, 0, 0))
+  const parts         = new Intl.DateTimeFormat('en-US', {
+    timeZone: ianaTimezone,
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+    hour12: false,
+  }).formatToParts(refUtcNoon)
+
+  const get = (type: string): number => {
+    const v = parseInt(parts.find(p => p.type === type)?.value ?? '0', 10)
+    return isNaN(v) ? 0 : (type === 'hour' ? v % 24 : v)
+  }
+
+  const localNoonAsUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
+  const offsetMs       = refUtcNoon.getTime() - localNoonAsUtc  // positive = tz is behind UTC
+
+  const startUtc = new Date(Date.UTC(yr, mo - 1, dy,  0,  0,  0) + offsetMs)
+  const endUtc   = new Date(Date.UTC(yr, mo - 1, dy, 23, 59, 59) + offsetMs)
+
+  return {
+    min: startUtc.toISOString(),
+    max: endUtc.toISOString(),
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 const ORDERS_FIELDS = [
-  'id', 'name', 'email', 'created_at', 'processed_at', 'source_name',
+  'id', 'name', 'email', 'created_at', 'processed_at', 'source_name', 'cancel_reason',
   'financial_status', 'fulfillment_status',
   'total_price', 'current_total_price', 'subtotal_price', 'total_tax', 'total_discounts',
   'total_shipping_price_set', 'currency',
@@ -178,13 +241,15 @@ const PRIORITY_ORDERS_FIELDS = [
 
 /**
  * Fetches all orders in a date range (YYYY-MM-DD to YYYY-MM-DD), all at once.
+ * Uses the store's IANA timezone for day boundaries so that selected dates match
+ * the store's local calendar (same logic as fetchOrdersForDate).
  * Includes extra fields needed for Priority export (gateway, phone, billing_address).
  */
 export async function fetchOrdersForPriorityRange(dateFrom: string, dateTo: string): Promise<ShopifyOrder[]> {
-  const token = await getAccessToken()
-
-  const startIso = `${dateFrom}T00:00:00Z`
-  const endIso   = `${dateTo}T23:59:59Z`
+  const token    = await getAccessToken()
+  const storeTz  = await getStoreTimezone()
+  const { min: startIso } = localDayToUtcWindow(dateFrom, storeTz)
+  const { max: endIso }   = localDayToUtcWindow(dateTo,   storeTz)
 
   const orders: ShopifyOrder[] = []
   let pageInfo: string | null = null
@@ -290,14 +355,14 @@ export async function getCustomerOrderCounts(customerIds: number[]): Promise<Rec
 
 /**
  * Fetches all orders created on the given date (YYYY-MM-DD).
- * Uses UTC boundaries: 00:00:00Z – 23:59:59Z.
+ * Uses the store's IANA timezone to determine the correct UTC window so that
+ * the day boundaries match Shopify's own timezone and tools like Metorik.
  * Handles cursor-based pagination automatically.
  */
 export async function fetchOrdersForDate(date: string): Promise<ShopifyOrder[]> {
-  const token = await getAccessToken()
-
-  const startIso = `${date}T00:00:00Z`
-  const endIso   = `${date}T23:59:59Z`
+  const token    = await getAccessToken()
+  const storeTz  = await getStoreTimezone()
+  const { min: startIso, max: endIso } = localDayToUtcWindow(date, storeTz)
 
   const orders: ShopifyOrder[] = []
   let pageInfo: string | null = null

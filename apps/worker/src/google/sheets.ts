@@ -85,13 +85,21 @@ async function aggregateStats(orders: ShopifyOrder[], date: string): Promise<Dai
   let returningOrders = 0
   let unitsSold       = 0
 
+  // Exclude $0 orders (test/draft checkouts, voided $0 cancellations) and
+  // Shopify admin draft orders. Cancelled orders that had real revenue are kept
+  // because Metorik counts them — their gross and refund both appear, netting $0.
+  const billableOrders = orders.filter(o =>
+    o.source_name !== 'shopify_draft_order' &&
+    parseFloat(o.total_price) > 0,
+  )
+
   // Fetch orders_count for all unique customers in one batch call.
   // orders_count === 1 means this is their first-ever order → new customer.
   // Guest checkouts (no customer) are always counted as new.
-  const customerIds    = [...new Set(orders.map(o => o.customer?.id).filter((id): id is number => id != null))]
+  const customerIds    = [...new Set(billableOrders.map(o => o.customer?.id).filter((id): id is number => id != null))]
   const ordersCounts   = customerIds.length > 0 ? await getCustomerOrderCounts(customerIds) : {}
 
-  for (const o of orders) {
+  for (const o of billableOrders) {
     grossRevenue  += parseFloat(o.total_price)
     totalRefunds  += computeRefundTotal(o)
     unitsSold     += o.line_items.reduce((s, li) => s + (li.quantity ?? 0), 0)
@@ -116,7 +124,7 @@ async function aggregateStats(orders: ShopifyOrder[], date: string): Promise<Dai
     netRevenue,
     newCustomers,
     returningOrders,
-    totalOrders: orders.length,
+    totalOrders: billableOrders.length,
     unitsSold,
   }
 }

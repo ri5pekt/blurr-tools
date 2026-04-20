@@ -2,7 +2,23 @@
   <div class="daily-orders-view">
 
     <div class="page-header">
-      <h1>Daily Orders Export</h1>
+      <div class="header-title-row">
+        <h1>Daily Orders Export</h1>
+        <a
+          v-if="sheetUrl"
+          :href="sheetUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="sheet-btn"
+          title="Open Google Sheet"
+        >
+          <svg class="sheet-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M19.5 3h-3V1.5A1.5 1.5 0 0 0 15 0H9a1.5 1.5 0 0 0-1.5 1.5V3h-3A1.5 1.5 0 0 0 3 4.5v18A1.5 1.5 0 0 0 4.5 24h15a1.5 1.5 0 0 0 1.5-1.5v-18A1.5 1.5 0 0 0 19.5 3zM9 1.5h6V3H9V1.5zm10.5 21h-15v-18h3V6h6V4.5h3v-1.5h3v18z" fill="#0F9D58"/>
+            <path d="M7.5 9h9v1.5h-9V9zm0 3h9v1.5h-9V12zm0 3h6v1.5h-6V15z" fill="#0F9D58"/>
+          </svg>
+          Open Sheet
+        </a>
+      </div>
       <p>Fetch Shopify orders for a date range and write them to Google Sheets.</p>
     </div>
 
@@ -190,6 +206,8 @@ const auth        = useAuthStore()
 const queryClient = useQueryClient()
 const toast       = useToast()
 const isAdmin     = computed(() => auth.user?.role === 'admin')
+
+const sheetUrl = import.meta.env.VITE_DAILY_ORDERS_SHEET_URL as string | undefined
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
 
@@ -383,17 +401,52 @@ async function saveSchedule(enabled?: boolean) {
 
 /* ─── Header ─────────────────────────────────────────────────────────── */
 
+.header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
 .page-header h1 {
   font-size: 1.5rem;
   font-weight: 700;
   color: #111827;
-  margin: 0 0 0.25rem;
+  margin: 0;
 }
 
 .page-header p {
   margin: 0;
   font-size: 0.9375rem;
   color: #6b7280;
+}
+
+.sheet-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid #bde8d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.sheet-btn:hover {
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.sheet-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 /* ─── Panel ─────────────────────────────────────────────────────────── */
