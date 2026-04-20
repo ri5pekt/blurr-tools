@@ -21,6 +21,10 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 FROM deps AS builder
 COPY . .
 
+# Vite bakes VITE_* vars at build time — pass them as build args
+ARG VITE_DAILY_ORDERS_SHEET_URL
+ENV VITE_DAILY_ORDERS_SHEET_URL=$VITE_DAILY_ORDERS_SHEET_URL
+
 RUN pnpm --filter @blurr-tools/types build \
     && pnpm --filter @blurr-tools/web build
 

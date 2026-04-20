@@ -110,6 +110,8 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        VITE_DAILY_ORDERS_SHEET_URL: ${VITE_DAILY_ORDERS_SHEET_URL}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3011:80"
