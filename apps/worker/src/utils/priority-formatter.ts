@@ -90,9 +90,15 @@ export function formatOrdersToPriorityTxt(orders: ShopifyOrder[]): string {
 
     output += buildLine(['3', phone, email, customerName, address, city, zip])
 
+    // Split line items: regular products vs. package-protection fee items.
+    // Protection items are emitted after shipping as barcode-100 fee rows,
+    // matching the PHP plugin's fee loop (same as WooCommerce order fees).
+    const regularItems    = order.line_items.filter(li => li.title.toLowerCase() !== 'package protection')
+    const protectionItems = order.line_items.filter(li => li.title.toLowerCase() === 'package protection')
+
     // ── Line 5: line items ────────────────────────────────────────────────────
     // 5  BARCODE  TQUANT  PRICE  PERCENT  TOTPRICE
-    for (const item of order.line_items) {
+    for (const item of regularItems) {
       const barcode    = item.sku || String(item.id)
       const qty        = item.quantity
       const lineTotal  = parseFloat(item.price) * item.quantity
@@ -118,6 +124,15 @@ export function formatOrdersToPriorityTxt(orders: ShopifyOrder[]): string {
     )
     if (shipping > 0) {
       output += buildLine(['5', '999', '1', '', '', shipping])
+    }
+
+    // ── Package Protection fee (barcode 100) ──────────────────────────────────
+    // Mirrors the PHP plugin's fee loop: any WC fee with no special name → barcode 100.
+    // On Shopify this fee arrives as a line item (added by UpCart), so we emit it here
+    // after shipping to preserve the same row order as the WP plugin.
+    for (const item of protectionItems) {
+      const feeTotal = parseFloat(item.price) * item.quantity
+      output += buildLine(['5', '100', '1', '', '', feeTotal])
     }
   }
 
