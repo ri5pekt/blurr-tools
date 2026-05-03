@@ -24,7 +24,7 @@ def run(cmd, timeout=300, label=None):
     return ec
 
 run("git -C /var/www/blurr-tools pull origin main", timeout=60, label="git pull")
-run("cd /var/www/blurr-tools && docker compose -f docker-compose.prod.yml build api worker", timeout=600, label="Build api + worker")
+run("cd /var/www/blurr-tools && docker compose -f docker-compose.prod.yml build api worker web", timeout=600, label="Build api + worker + web")
 run("cd /var/www/blurr-tools && docker compose -f docker-compose.prod.yml up -d --remove-orphans", timeout=60, label="Up")
 
 print("\nWaiting for API health...")

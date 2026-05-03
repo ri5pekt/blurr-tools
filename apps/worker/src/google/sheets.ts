@@ -41,7 +41,7 @@ function getDateLabel(date: string): string {
   return d.toLocaleString('en-US', {
     weekday: 'long',
     month:   'long',
-    day:     'numeric',
+    day:     '2-digit',
     year:    'numeric',
     timeZone: 'UTC',
   })
