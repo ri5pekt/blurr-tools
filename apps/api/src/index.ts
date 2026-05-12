@@ -3,6 +3,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import { createDb } from '@blurr-tools/db'
 import { env } from './env.js'
 import { fileURLToPath } from 'url'
+
 import { dirname, join } from 'path'
 import Fastify from 'fastify'
 import fastifyJwt from '@fastify/jwt'
@@ -15,6 +16,7 @@ import { jobsRoutes } from './routes/jobs.js'
 import { logsRoutes } from './routes/logs.js'
 import { dailyOrdersRoutes } from './routes/features/daily-orders.js'
 import { priorityExportRoutes } from './routes/features/priority-export.js'
+import { blurrDailyStatsRoutes } from './routes/features/blurr-daily-stats.js'
 
 // ─── Run DB migrations before starting the server ────────────────────────────
 
@@ -75,6 +77,7 @@ await fastify.register(jobsRoutes)
 await fastify.register(logsRoutes)
 await fastify.register(dailyOrdersRoutes)
 await fastify.register(priorityExportRoutes)
+await fastify.register(blurrDailyStatsRoutes)
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 

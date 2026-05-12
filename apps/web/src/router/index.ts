@@ -39,6 +39,11 @@ const router = createRouter({
           component: () => import('../views/PriorityExportView.vue'),
         },
         {
+          path:      'blurr-daily-stats',
+          name:      'blurr-daily-stats',
+          component: () => import('../views/BlurrDailyStatsView.vue'),
+        },
+        {
           path:      'settings',
           name:      'settings',
           component: () => import('../views/SettingsView.vue'),

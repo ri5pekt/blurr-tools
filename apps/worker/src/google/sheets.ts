@@ -256,3 +256,181 @@ export async function writeOrdersToSheet(
 
   return { sheetUrl, rowsWritten: 1, ordersCount: orders.length, tabName, rowNumber }
 }
+
+// ─── Blurr Daily Stats ────────────────────────────────────────────────────────
+
+/**
+ * "2026-05-11" → "May 11, 2026"
+ * Matches the format used in the reference CSV export.
+ */
+function getBlurrDateLabel(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`)
+  return d.toLocaleString('en-US', {
+    month:    'long',
+    day:      'numeric',
+    year:     'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+const BLURR_STATS_FIXED_HEADERS = [
+  'Date',
+  'Total Daily Gross Sales',
+  'Total Orders',
+  'Shopify Fees',
+  'Collected Sales Tax',
+  'Total Units',
+  'Total Daily Refunds',
+]
+
+export interface BlurrDailyStats {
+  grossSales:  number
+  totalOrders: number
+  shopifyFees: number
+  salesTax:    number
+  totalUnits:  number
+  totalRefunds: number
+  productUnits: Record<string, number>  // productTitle → units sold
+}
+
+export interface WriteBlurrStatsResult {
+  sheetUrl:    string
+  rowNumber:   number
+  ordersCount: number
+  date:        string
+}
+
+// Module-level cache so repeated jobs in a batch don't re-fetch metadata
+let cachedBlurrSheetTitle: string | null = null
+
+/**
+ * Writes aggregated Blurr Daily Stats for `date` (YYYY-MM-DD) into the
+ * dedicated stats spreadsheet (BLURR_DAILY_STATS_SPREADSHEET_ID).
+ *
+ * Sheet layout (single tab, no month tabs):
+ *   Row 1: headers  — Date | Total Daily Gross Sales | Total Orders | Shopify Fees |
+ *                     Collected Sales Tax | Total Units | Total Daily Refunds | [products…]
+ *   Row 2+: one data row per date
+ *
+ * Write logic:
+ *   1. Read header row — create it if missing, extend with new product columns if needed.
+ *   2. Scan column A for the date label — update in place if found, append if not.
+ */
+export async function writeBlurrDailyStatsToSheet(
+  date:  string,
+  stats: BlurrDailyStats,
+): Promise<WriteBlurrStatsResult> {
+  const spreadsheetId = env.BLURR_DAILY_STATS_SPREADSHEET_ID
+  if (!spreadsheetId) {
+    throw new Error('BLURR_DAILY_STATS_SPREADSHEET_ID is not configured.')
+  }
+
+  const sheets    = getSheetsClient()
+  const dateLabel = getBlurrDateLabel(date)
+
+  // ── 0. Resolve the first sheet's actual title ─────────────────────────────
+  // Cache the sheet title in module scope to avoid repeated metadata reads
+  if (!cachedBlurrSheetTitle) {
+    const meta       = await sheets.spreadsheets.get({ spreadsheetId })
+    cachedBlurrSheetTitle = meta.data.sheets?.[0]?.properties?.title ?? 'Sheet1'
+  }
+  const sheetTitle = cachedBlurrSheetTitle
+  const q          = (range: string) => `'${sheetTitle}'!${range}`
+
+  // ── 1. Read header row ────────────────────────────────────────────────────
+
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: q('A1:ZZ1'),
+  })
+  let headers: string[] = (headerRes.data.values?.[0] ?? []).map(String)
+
+  // Build a sorted list of all product columns needed this run
+  const newProducts = Object.keys(stats.productUnits)
+    .filter(p => !headers.includes(p))
+    .sort()
+
+  const needsHeaderInit = headers.length === 0
+
+  if (needsHeaderInit) {
+    headers = [...BLURR_STATS_FIXED_HEADERS, ...Object.keys(stats.productUnits).sort()]
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range:            q('A1'),
+      valueInputOption: 'USER_ENTERED',
+      requestBody:      { values: [headers] },
+    })
+  } else if (newProducts.length > 0) {
+    // Append new product columns to the right of the existing headers
+    headers = [...headers, ...newProducts]
+    const startCol = columnLetter(headers.length - newProducts.length + 1)
+    const endCol   = columnLetter(headers.length)
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range:            q(`${startCol}1:${endCol}1`),
+      valueInputOption: 'USER_ENTERED',
+      requestBody:      { values: [newProducts] },
+    })
+  }
+
+  // ── 2. Find or create the data row ───────────────────────────────────────
+
+  const colARes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: q('A:A'),
+  })
+  const colAValues = (colARes.data.values ?? []).map(r => String(r[0] ?? '').trim())
+
+  let rowNumber = colAValues.findIndex(v => v === dateLabel)
+
+  if (rowNumber === -1) {
+    // Append a new row — rowNumber becomes the next available row (1-indexed)
+    rowNumber = colAValues.length + 1
+  } else {
+    rowNumber = rowNumber + 1  // convert 0-indexed to 1-indexed
+  }
+
+  // ── 3. Build the row values in header order ───────────────────────────────
+
+  const row: (string | number)[] = headers.map(h => {
+    switch (h) {
+      case 'Date':                    return dateLabel
+      case 'Total Daily Gross Sales': return stats.grossSales
+      case 'Total Orders':            return stats.totalOrders
+      case 'Shopify Fees':            return stats.shopifyFees
+      case 'Collected Sales Tax':     return stats.salesTax
+      case 'Total Units':             return stats.totalUnits
+      case 'Total Daily Refunds':     return stats.totalRefunds
+      default:                        return stats.productUnits[h] ?? 0
+    }
+  })
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range:            q(`A${rowNumber}`),
+    valueInputOption: 'USER_ENTERED',
+    requestBody:      { values: [row] },
+  })
+
+  const sheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`
+
+  return {
+    sheetUrl,
+    rowNumber,
+    ordersCount: stats.totalOrders,
+    date,
+  }
+}
+
+/**
+ * Converts a 1-based column index to a spreadsheet column letter (A, B, … Z, AA, …).
+ */
+function columnLetter(n: number): string {
+  let result = ''
+  while (n > 0) {
+    const remainder = (n - 1) % 26
+    result = String.fromCharCode(65 + remainder) + result
+    n = Math.floor((n - 1) / 26)
+  }
+  return result
+}

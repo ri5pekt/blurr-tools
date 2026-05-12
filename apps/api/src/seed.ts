@@ -31,6 +31,19 @@ async function seed() {
     .onConflictDoNothing()
 
   console.log('✓ Default schedule seeded (daily at 08:00 ET, disabled)')
+
+  await db
+    .insert(scheduledExports)
+    .values({
+      feature:  'blurr_daily_stats_export',
+      name:     'Blurr Daily Stats Export',
+      cron:     '0 8 * * *',
+      timezone: 'America/New_York',
+      enabled:  false,
+    })
+    .onConflictDoNothing()
+
+  console.log('✓ Blurr daily stats schedule seeded (daily at 08:00 ET, disabled)')
   process.exit(0)
 }
 

@@ -20,6 +20,7 @@ export const jobStatusEnum = pgEnum('job_status', [
 export const featureEnum = pgEnum('feature', [
   'daily_orders_export',
   'priority_export',
+  'blurr_daily_stats_export', // added in migration 0003
 ])
 
 // ─── Log enums ────────────────────────────────────────────────────────────────

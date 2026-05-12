@@ -3,54 +3,69 @@ import { db } from './db.js'
 import { scheduledExports } from '@blurr-tools/db'
 import { queues } from './queues.js'
 
-const FEATURE         = 'daily_orders_export' as const
-const JOB_NAME        = 'scheduled'
-const SYNC_INTERVAL   = 5 * 60 * 1000 // re-sync every 5 minutes
+const SYNC_INTERVAL = 5 * 60 * 1000 // re-sync every 5 minutes
+const JOB_NAME      = 'scheduled'
 
-let lastCron: string | null = null
-let lastEnabled: boolean | null = null
+interface FeatureScheduleState {
+  lastCron:    string | null
+  lastEnabled: boolean | null
+}
+
+const state: Record<string, FeatureScheduleState> = {
+  daily_orders_export:     { lastCron: null, lastEnabled: null },
+  blurr_daily_stats_export: { lastCron: null, lastEnabled: null },
+}
 
 /**
- * Syncs the BullMQ repeatable job with the schedule stored in the DB.
+ * Syncs the BullMQ repeatable job for a single feature with the schedule stored in the DB.
  * Idempotent — only removes/adds if something changed.
  */
-async function syncSchedule(): Promise<void> {
+async function syncFeatureSchedule(feature: 'daily_orders_export' | 'blurr_daily_stats_export'): Promise<void> {
+  const queue = feature === 'daily_orders_export'
+    ? queues.dailyOrdersExport
+    : queues.blurrDailyStats
+
   const [schedule] = await db
     .select()
     .from(scheduledExports)
-    .where(eq(scheduledExports.feature, FEATURE))
+    .where(eq(scheduledExports.feature, feature))
     .limit(1)
 
   const enabled  = schedule?.enabled  ?? false
   const cron     = schedule?.cron     ?? null
   const timezone = schedule?.timezone ?? 'America/New_York'
 
-  const changed = enabled !== lastEnabled || cron !== lastCron
+  const s       = state[feature]!
+  const changed = enabled !== s.lastEnabled || cron !== s.lastCron
 
   if (!changed) return
 
-  // Remove any existing repeatable job for this feature
-  const repeatableJobs = await queues.dailyOrdersExport.getRepeatableJobs()
+  const repeatableJobs = await queue.getRepeatableJobs()
   for (const rj of repeatableJobs) {
     if (rj.name === JOB_NAME) {
-      await queues.dailyOrdersExport.removeRepeatableByKey(rj.key)
-      console.log('[scheduler] Removed old repeatable job:', rj.key)
+      await queue.removeRepeatableByKey(rj.key)
+      console.log(`[scheduler] Removed old repeatable job for ${feature}:`, rj.key)
     }
   }
 
   if (enabled && cron) {
-    await queues.dailyOrdersExport.add(
+    await queue.add(
       JOB_NAME,
       { date: 'auto' },
       { repeat: { pattern: cron, tz: timezone } },
     )
-    console.log(`[scheduler] Registered repeatable job: ${cron} (${timezone})`)
+    console.log(`[scheduler] Registered repeatable job for ${feature}: ${cron} (${timezone})`)
   } else {
-    console.log('[scheduler] Schedule disabled — no repeatable job registered')
+    console.log(`[scheduler] Schedule disabled — no repeatable job registered for ${feature}`)
   }
 
-  lastEnabled = enabled
-  lastCron    = cron
+  s.lastEnabled = enabled
+  s.lastCron    = cron
+}
+
+async function syncSchedule(): Promise<void> {
+  await syncFeatureSchedule('daily_orders_export')
+  await syncFeatureSchedule('blurr_daily_stats_export')
 }
 
 export async function startScheduler(): Promise<void> {

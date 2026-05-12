@@ -53,6 +53,14 @@ const features = [
     name:        'Priority Export',
     description: 'Export Shopify orders to a Priority-compatible TXT file for financial import.',
   },
+  {
+    to:          '/app/blurr-daily-stats',
+    icon:        'pi-chart-bar',
+    iconColor:   '#7c3aed',
+    iconBg:      '#f5f3ff',
+    name:        'Blurr Daily Stats',
+    description: 'Export daily Shopify stats — orders, fees, units, and per-product breakdown — to Google Sheets.',
+  },
 ]
 </script>
 

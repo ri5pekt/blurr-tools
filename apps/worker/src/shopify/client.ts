@@ -354,13 +354,120 @@ export async function getCustomerOrderCounts(customerIds: number[]): Promise<Rec
 }
 
 /**
+ * Fetches the total Shopify payment processing fees for all orders on the given
+ * date (YYYY-MM-DD) via the GraphQL Admin API.
+ *
+ * Uses the exact same store-timezone window as fetchOrdersForDate so that fee
+ * totals and order stats are always scoped to the same UTC range.
+ *
+ * Only `CAPTURE` and `SALE` transactions carry fees; authorization transactions
+ * have an empty fees array and are ignored by the API automatically.
+ *
+ * Returns the sum of all fee amounts in shop currency (USD), rounded to 2 dp.
+ */
+export async function fetchFeesForDate(date: string): Promise<number> {
+  const token   = await getAccessToken()
+  const storeTz = await getStoreTimezone()
+  const { min: startIso, max: endIso } = localDayToUtcWindow(date, storeTz)
+
+  const shop       = getShopDomain()
+  const apiVersion = API_VERSION
+  const url        = `https://${shop}/admin/api/${apiVersion}/graphql.json`
+
+  const query = `
+    query($cursor: String) {
+      orders(
+        first: 50
+        after: $cursor
+        query: "created_at:>=${startIso} created_at:<=${endIso}"
+      ) {
+        edges {
+          node {
+            transactions {
+              fees {
+                amount { amount }
+              }
+            }
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  `
+
+  let totalFees = 0
+  let cursor: string | null = null
+  let hasNextPage = true
+
+  while (hasNextPage) {
+    const res = await fetch(url, {
+      method:  'POST',
+      headers: {
+        'Content-Type':          'application/json',
+        'X-Shopify-Access-Token': token,
+      },
+      body: JSON.stringify({ query, variables: { cursor } }),
+    })
+
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get('Retry-After') ?? '2', 10)
+      await sleep(Math.max(retryAfter * 1000, 2000))
+      continue
+    }
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Shopify GraphQL fees fetch failed (${res.status}): ${text}`)
+    }
+
+    const json = await res.json() as {
+      data?: {
+        orders: {
+          edges: Array<{
+            node: {
+              transactions: Array<{
+                fees: Array<{ amount: { amount: string } }>
+              }>
+            }
+          }>
+          pageInfo: { hasNextPage: boolean; endCursor: string | null }
+        }
+      }
+      errors?: Array<{ message: string }>
+    }
+
+    if (json.errors?.length) {
+      throw new Error(`Shopify GraphQL error: ${json.errors.map(e => e.message).join(', ')}`)
+    }
+
+    const orders = json.data?.orders
+    if (!orders) break
+
+    for (const edge of orders.edges) {
+      for (const txn of edge.node.transactions) {
+        for (const fee of txn.fees) {
+          totalFees += parseFloat(fee.amount.amount ?? '0')
+        }
+      }
+    }
+
+    hasNextPage = orders.pageInfo.hasNextPage
+    cursor      = orders.pageInfo.endCursor
+  }
+
+  return Math.round(totalFees * 100) / 100
+}
+
+/**
  * Fetches all orders created on the given date (YYYY-MM-DD).
  * Uses the store's IANA timezone to determine the correct UTC window so that
  * the day boundaries match Shopify's own timezone and tools like Metorik.
  * Handles cursor-based pagination automatically.
  */
-export async function fetchOrdersForDate(date: string): Promise<ShopifyOrder[]> {
-  const token    = await getAccessToken()
+export async function fetchOrdersForDate(date: string): Promise<ShopifyOrder[]> {  const token    = await getAccessToken()
   const storeTz  = await getStoreTimezone()
   const { min: startIso, max: endIso } = localDayToUtcWindow(date, storeTz)
 
