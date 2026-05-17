@@ -4,7 +4,8 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 
 HOST = "31.220.56.146"
 USER = "root"
-KEY  = r"C:\Users\denis\.ssh\id_ed25519"
+import os as _os
+KEY  = _os.path.join(_os.path.expanduser("~"), ".ssh", "id_ed25519")
 
 ssh = paramiko.SSHClient()
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())

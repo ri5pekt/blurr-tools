@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shopify — Financial Data Availability Reference</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: #fff;
+      padding: 52px 60px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    @media print {
+      body { padding: 20px 28px; font-size: 11px; }
+      .no-break { page-break-inside: avoid; }
+      h2 { page-break-after: avoid; }
+      table { page-break-inside: auto; }
+      tr { page-break-inside: avoid; }
+    }
+
+    /* Typography */
+    h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 6px; }
+    h2 { font-size: 15px; font-weight: 700; margin-bottom: 10px; color: #111; }
+    h3 { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #222; }
+    p  { color: #444; margin-bottom: 10px; line-height: 1.6; }
+    strong { color: #111; }
+
+    .section     { margin-bottom: 36px; }
+    .grid-2      { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3      { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .grid-4      { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+    .row         { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    hr { border: none; border-top: 1px solid #e5e7eb; margin: 28px 0; }
+
+    /* Stat boxes */
+    .stat {
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 14px 16px;
+      text-align: center;
+    }
+    .stat-value { font-size: 26px; font-weight: 700; color: #111; line-height: 1; }
+    .stat-label { font-size: 11px; color: #666; margin-top: 4px; }
+
+    /* Callouts */
+    .callout {
+      border-left: 3px solid #f59e0b;
+      background: #fffbeb;
+      padding: 11px 15px;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 14px;
+      color: #78350f;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .callout.info  { border-left-color: #3b82f6; background: #eff6ff; color: #1e3a5f; }
+    .callout.danger{ border-left-color: #ef4444; background: #fef2f2; color: #7f1d1d; }
+    .callout.green { border-left-color: #22c55e; background: #f0fdf4; color: #14532d; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+    thead tr { background: #f9fafb; }
+    th {
+      text-align: left;
+      padding: 9px 13px;
+      font-weight: 600;
+      color: #374151;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    td {
+      padding: 8px 13px;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: top;
+      color: #374151;
+    }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #fafafa; }
+    td.label { font-weight: 500; color: #111; width: 32%; }
+    td.avail { width: 10%; text-align: center; }
+    .yes { color: #16a34a; font-weight: 600; }
+    .no  { color: #dc2626; font-weight: 600; }
+
+    /* Cards */
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+    .card-header {
+      background: #f9fafb;
+      padding: 9px 14px;
+      font-weight: 600;
+      font-size: 12px;
+      border-bottom: 1px solid #e5e7eb;
+      color: #111;
+    }
+    .card-body { padding: 12px 14px; color: #444; font-size: 12px; line-height: 1.55; }
+
+    /* Section label pill */
+    .section-tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      white-space: nowrap;
+      letter-spacing: 0.2px;
+    }
+
+    footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 10px; }
+    .meta  { color: #888; font-size: 11px; margin-top: 4px; margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+
+  <!-- TITLE -->
+  <h1>Shopify — Financial Data Availability</h1>
+  <p class="meta">Reference document for accounting &amp; financial reconciliation &nbsp;·&nbsp; May 2026</p>
+
+  <!-- INTRO -->
+  <div class="section">
+    <p>
+      This document outlines what financial information Shopify makes available for reporting and reconciliation purposes.
+      The data covers three levels: <strong>payouts</strong> (transfers to your bank), <strong>individual transactions</strong>
+      that make up each payout, and <strong>order-level</strong> financial detail including taxes and discounts.
+      It also lists what Shopify does <em>not</em> make available and where to find that information instead.
+    </p>
+    <div class="callout">
+      <strong>Important:</strong> Payout and transaction-level data is only available for stores using
+      <strong>Shopify Payments</strong> as their payment processor. Stores using third-party processors
+      (Stripe, PayPal, etc.) do not have access to this data through Shopify.
+    </div>
+  </div>
+
+  <div class="grid-4 section">
+    <div class="stat"><div class="stat-value">3</div><div class="stat-label">reporting levels</div></div>
+    <div class="stat"><div class="stat-value">17</div><div class="stat-label">payout data points</div></div>
+    <div class="stat"><div class="stat-value">13</div><div class="stat-label">transaction data points</div></div>
+    <div class="stat"><div class="stat-value">11</div><div class="stat-label">gaps &amp; limitations</div></div>
+  </div>
+
+  <hr />
+
+  <!-- LEVEL 1: PAYOUTS -->
+  <div class="section no-break">
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="margin-bottom:0">Level 1 — Payout Report</h2>
+      <span class="section-tag">Per bank transfer</span>
+    </div>
+    <p>
+      For every transfer Shopify sends to your bank account, the following information is available.
+      The summary fields give you a categorised breakdown of what made up that payout — similar to
+      what you would see in the Shopify Admin under Finances → Payouts.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:33%">Data Point</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="label">Payout amount (net)</td><td>The total amount transferred to your bank — after all fees, refunds, and adjustments have been applied</td></tr>
+        <tr><td class="label">Issue date &amp; time</td><td>The exact date and time the transfer was initiated</td></tr>
+        <tr><td class="label">Transfer status</td><td>Whether the payout is: Scheduled, In Transit, Paid, Failed, or Cancelled</td></tr>
+        <tr><td class="label">Transfer direction</td><td>Whether funds are going into the bank (deposit) or back to Shopify (withdrawal, e.g. after a failed payout reversal)</td></tr>
+        <tr><td class="label">Bank reference number</td><td>The unique trace/reference number assigned by the financial institution — use this to match the transfer in your bank statement</td></tr>
+        <tr><td class="label">Legal entity</td><td>The business entity associated with the payout</td></tr>
+        <tr><td class="label">Charges — gross</td><td>Total revenue collected from customers during this payout period, before any fees</td></tr>
+        <tr><td class="label">Charges — fees</td><td>Total Shopify Payments processing fees deducted from customer charges</td></tr>
+        <tr><td class="label">Refunds — gross</td><td>Total gross amount refunded to customers</td></tr>
+        <tr><td class="label">Refunds — fees returned</td><td>Processing fees credited back to you for refunded transactions</td></tr>
+        <tr><td class="label">Adjustments — gross</td><td>Gross amount of adjustments, including chargeback resolutions and dispute outcomes</td></tr>
+        <tr><td class="label">Adjustments — fees</td><td>Fees associated with adjustments and chargebacks</td></tr>
+        <tr><td class="label">Capital advance repayments — gross</td><td>Gross amount deducted for Shopify Capital loan repayments (if applicable)</td></tr>
+        <tr><td class="label">Capital advance repayments — fees</td><td>Fees associated with Shopify Capital repayments</td></tr>
+        <tr><td class="label">Reserved funds — gross</td><td>Amount of funds held back by Shopify as a reserve (risk management)</td></tr>
+        <tr><td class="label">Reserved funds — fees</td><td>Fees on any reserved fund balance</td></tr>
+        <tr><td class="label">Re-attempted payouts — gross</td><td>Gross of transfers that were previously failed and are being re-sent</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr />
+
+  <!-- LEVEL 2: BALANCE TRANSACTIONS -->
+  <div class="section no-break">
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="margin-bottom:0">Level 2 — Individual Transaction Detail</h2>
+      <span class="section-tag">Per transaction within a payout</span>
+    </div>
+    <p>
+      Each payout is composed of many individual transactions. For every charge, refund, chargeback,
+      or adjustment, the following information is available. This is the level where you can tie a
+      specific bank payout line back to a customer order.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:33%">Data Point</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="label">Gross amount</td><td>The full amount of the transaction before any fees are deducted</td></tr>
+        <tr><td class="label">Processing fee</td><td>The Shopify Payments fee deducted for this specific transaction</td></tr>
+        <tr><td class="label">Net amount</td><td>The amount that actually changes your Shopify Payments balance (gross minus fee)</td></tr>
+        <tr><td class="label">Transaction date</td><td>The date and time this transaction was processed</td></tr>
+        <tr><td class="label">Transaction category</td><td>What type of money movement this is: Customer Payment, Refund, Dispute/Chargeback, Bank Transfer, Manual Adjustment, or System Correction</td></tr>
+        <tr><td class="label">Associated order</td><td>The customer order that caused this transaction — links the payout line back to a specific sale</td></tr>
+        <tr><td class="label">Order transaction reference</td><td>The specific payment event within that order (e.g. the capture, the refund)</td></tr>
+        <tr><td class="label">Source reference ID</td><td>Shopify's internal ID for the underlying charge, refund, or dispute</td></tr>
+        <tr><td class="label">Adjustment reason</td><td>A text explanation of why an adjustment was made (only present for manual adjustments)</td></tr>
+        <tr><td class="label">Related adjustment orders</td><td>Any orders linked to a dispute or chargeback resolution</td></tr>
+        <tr><td class="label">Payout this belongs to</td><td>Which bank transfer this transaction is included in</td></tr>
+        <tr><td class="label">Test transaction flag</td><td>Whether this was a test transaction (not real money)</td></tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top:16px">
+      <h3>Transaction Categories Explained</h3>
+      <table>
+        <thead><tr><th style="width:28%">Category</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="label">Customer Payment</td><td>A successful charge on a customer's card — money coming into your balance</td></tr>
+          <tr><td class="label">Refund</td><td>Money returned to a customer — reduces your balance</td></tr>
+          <tr><td class="label">Dispute / Chargeback</td><td>A customer has disputed a charge with their bank; Shopify holds the funds pending resolution</td></tr>
+          <tr><td class="label">Bank Transfer</td><td>The payout itself — the movement of your balance to your bank account</td></tr>
+          <tr><td class="label">Manual Adjustment</td><td>A correction applied by Shopify (e.g. to correct an error or settle a dispute in your favour)</td></tr>
+          <tr><td class="label">Adjustment Reversal</td><td>A reversal of a previously applied manual adjustment</td></tr>
+          <tr><td class="label">System Correction</td><td>An automatic balance correction applied by Shopify's systems</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <hr />
+
+  <!-- LEVEL 3: ORDER FINANCIAL DATA -->
+  <div class="section no-break">
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="margin-bottom:0">Level 3 — Order Financial Detail</h2>
+      <span class="section-tag">Per customer order</span>
+    </div>
+    <p>
+      For each order, Shopify provides a detailed financial breakdown including taxes collected per
+      authority, discounts applied, shipping charged, and refund history. This level allows you to
+      understand the full composition of what a customer paid and how it breaks down for tax reporting.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:33%">Data Point</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="label">Current total price</td><td>The order's total today, including taxes and shipping, after any refunds or edits</td></tr>
+        <tr><td class="label">Current subtotal</td><td>Product subtotal today, after refunds and edits, excluding taxes and shipping</td></tr>
+        <tr><td class="label">Current total tax</td><td>Tax amount currently owed on this order, after refunds</td></tr>
+        <tr><td class="label">Current total discounts</td><td>Total discounts currently applied to the order after refunds</td></tr>
+        <tr><td class="label">Current shipping amount</td><td>Shipping amount currently charged after any shipping refunds</td></tr>
+        <tr><td class="label">Current additional fees</td><td>Duties, import fees, and other additional charges currently outstanding</td></tr>
+        <tr><td class="label">Original total price</td><td>The total price at the time the order was placed (before any edits or refunds)</td></tr>
+        <tr><td class="label">Original subtotal</td><td>Product subtotal at the time of order</td></tr>
+        <tr><td class="label">Original total tax</td><td>Total tax collected at the time of order creation</td></tr>
+        <tr><td class="label">Original total discounts</td><td>Total discounts applied at the time of order creation</td></tr>
+        <tr><td class="label">Original shipping amount</td><td>Shipping charged at the time of order creation</td></tr>
+        <tr><td class="label">Tax lines — per authority</td><td>Breakdown of tax collected by each tax authority: authority name (e.g. "CA State Tax", "EU VAT"), tax rate (%), and exact amount collected</td></tr>
+        <tr><td class="label">Tax authority liability flag</td><td>Indicates whether Shopify is responsible for remitting this particular tax on your behalf</td></tr>
+        <tr><td class="label">Per-product tax</td><td>Tax amount broken down per individual line item and per tax authority</td></tr>
+        <tr><td class="label">Per-product discounts</td><td>Discount amounts applied to each individual product line, and the discount source (coupon, automatic rule, etc.)</td></tr>
+        <tr><td class="label">Per-product original price</td><td>The listed price of each product before any discounts</td></tr>
+        <tr><td class="label">Per-product discounted price</td><td>The final price of each product after all discounts</td></tr>
+        <tr><td class="label">Payment status</td><td>Current payment status: Pending, Authorised, Partially Paid, Paid, Partially Refunded, Fully Refunded, or Voided</td></tr>
+        <tr><td class="label">Payment transactions</td><td>Each individual payment event: amount, payment method, gateway, status, and authorisation code</td></tr>
+        <tr><td class="label">Refund history</td><td>Full record of all refunds on the order: refunded products, refunded shipping, dates, and amounts</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout info" style="margin-top:14px">
+      <strong>Connecting orders to payouts:</strong> Each transaction in Level 2 includes a reference to the customer order it came from. This allows you to trace any payout line back to the original sale and see the full tax and discount breakdown for that order.
+    </div>
+  </div>
+
+  <hr />
+
+  <!-- WHAT'S NOT AVAILABLE -->
+  <div class="section no-break">
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="margin-bottom:0">What Shopify Does Not Make Available</h2>
+      <span class="section-tag" style="background:#fee2e2; color:#991b1b">Gaps &amp; Limitations</span>
+    </div>
+    <div class="callout">
+      The following are data points commonly needed for complete financial reporting that <strong>Shopify does not expose</strong>.
+      Each entry includes where to find this information instead.
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:33%">Missing Data Point</th>
+          <th>Explanation &amp; Where to Find It</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="label">Shopify plan / subscription cost</td>
+          <td>The monthly or annual Shopify subscription fee is not included in any report. It is charged separately on a Shopify billing invoice — find it in the Shopify Admin under Settings → Billing, or on your Shopify billing email.</td>
+        </tr>
+        <tr>
+          <td class="label">Processing fee rate per card type</td>
+          <td>Shopify shows the fee <em>amount</em> per transaction but does not disclose the breakdown by card brand (e.g. Visa vs Amex vs international). The rate tiers depend on your Shopify plan and are shown in Admin under Settings → Payments.</td>
+        </tr>
+        <tr>
+          <td class="label">Third-party app subscription costs</td>
+          <td>Costs for Shopify apps (shipping tools, marketing platforms, etc.) are not included in payout or financial reports. They appear on your separate Shopify billing invoice alongside your plan cost.</td>
+        </tr>
+        <tr>
+          <td class="label">Tax remitted by Shopify on your behalf</td>
+          <td>In certain jurisdictions (e.g. US marketplace facilitator states, Managed Markets), Shopify collects and remits sales tax directly to the tax authority without passing it through your payout at all. The tax amount simply does not appear — you receive only the net sale price. Shopify provides a separate tax remittance summary in the Admin under Analytics → Reports → Taxes.</td>
+        </tr>
+        <tr>
+          <td class="label">Currency conversion (FX) rate applied</td>
+          <td>When orders are placed in a different currency to your payout currency, Shopify converts at an internal rate. Both the customer's currency amount and your currency amount are available, but the exact exchange rate used is not disclosed. You can infer it by dividing one by the other.</td>
+        </tr>
+        <tr>
+          <td class="label">Shopify Shipping label costs</td>
+          <td>Postage purchased through Shopify Shipping is deducted from your Shopify Payments balance as a system adjustment. While the deduction appears in your transactions, it does not carry a label reference or tracking number — making line-by-line reconciliation against shipments difficult. Use the Shopify Admin shipping reports for detail.</td>
+        </tr>
+        <tr>
+          <td class="label">Shopify Email &amp; marketing add-on costs</td>
+          <td>Usage charges for Shopify Email and other built-in marketing tools are billed on your Shopify invoice, not deducted from your payout balance. Not available in financial reports — check the billing invoice.</td>
+        </tr>
+        <tr>
+          <td class="label">Shopify Capital — advance terms &amp; balance</td>
+          <td>The gross amount of Capital repayments deducted from each payout is visible, but the original advance amount, total amount owed, repayment percentage rate, and remaining balance are not available in reports. Shopify provides a separate Capital statement in Admin under Capital.</td>
+        </tr>
+        <tr>
+          <td class="label">Chargeback / dispute evidence &amp; final rulings</td>
+          <td>Dispute records show the current status (open, won, lost) and amount, but the full dispute timeline, evidence submitted, and final ruling communication are not available in data exports. They can only be viewed in the Shopify Admin under Finances → Disputes.</td>
+        </tr>
+        <tr>
+          <td class="label">Orders older than 60 days (default limit)</td>
+          <td>By default, Shopify only returns the last 60 days of order history. Full historical access must be explicitly enabled. If your reports are missing older orders, this restriction is the likely cause.</td>
+        </tr>
+        <tr>
+          <td class="label">Tax filing / remittance reports</td>
+          <td>The tax data available on individual orders shows what was <em>collected</em> from customers — not what has been <em>remitted</em> to tax authorities. Shopify does not produce a tax-filing-ready report through its data. Use the Tax report exports in Admin under Analytics → Reports → Taxes, or pass the order-level tax data to your accountant or tax software for filing.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr />
+
+  <!-- KEY ACCOUNTING NOTES -->
+  <div class="section no-break">
+    <h2>Key Points for Accounting &amp; Reconciliation</h2>
+    <div class="grid-2" style="margin-top:12px; gap:14px">
+      <div class="callout info" style="margin-bottom:0">
+        <strong>Processing fee = Shopify's cut per transaction.</strong><br/>
+        For every customer payment, Shopify deducts a processing fee (e.g. 2.5% + a fixed amount per transaction depending on your plan). The difference between the gross charge amount and the fee is what enters your Shopify Payments balance — and the sum of all these net amounts equals the payout you receive.
+      </div>
+      <div class="callout info" style="margin-bottom:0">
+        <strong>Tax on orders is not tax on your fees.</strong><br/>
+        The tax figures in Level 3 are taxes the <em>customer</em> paid on their purchase — money you collected on behalf of tax authorities. These are entirely separate from any VAT/GST that Shopify may charge <em>you</em> on its own subscription and processing fees, which appears only on the Shopify billing invoice.
+      </div>
+      <div class="callout info" style="margin-bottom:0">
+        <strong>Two currency amounts on every order.</strong><br/>
+        Every monetary value is provided in both your store's accounting currency and the currency the customer actually paid in. Always use the store currency column for your own bookkeeping and financial statements.
+      </div>
+      <div class="callout info" style="margin-bottom:0">
+        <strong>One order can create multiple payout lines.</strong><br/>
+        A single customer order may appear more than once in your transaction history — for example, once when payment was captured and again if a partial refund was later issued. All are linked to the same order reference.
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Shopify financial data reference for accounting purposes &nbsp;·&nbsp; Based on Shopify Admin API 2026-07 &nbsp;·&nbsp; May 4, 2026
+  </footer>
+
+</body>
+</html>

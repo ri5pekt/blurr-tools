@@ -273,6 +273,18 @@ function getBlurrDateLabel(date: string): string {
   })
 }
 
+/**
+ * "2026-05-11" → "May 2026"
+ * Each month gets its own tab.
+ */
+function getBlurrTabName(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`)
+  return d.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+}
+
+// Tabs we have already confirmed exist (or created) in this worker process
+const blurrTabCache = new Set<string>()
+
 const BLURR_STATS_FIXED_HEADERS = [
   'Date',
   'Total Daily Gross Sales',
@@ -298,23 +310,52 @@ export interface WriteBlurrStatsResult {
   rowNumber:   number
   ordersCount: number
   date:        string
+  tabName:     string
 }
 
-// Module-level cache so repeated jobs in a batch don't re-fetch metadata
-let cachedBlurrSheetTitle: string | null = null
+/**
+ * Ensures the monthly tab exists in the spreadsheet, creating it if needed.
+ * Results are cached in-process so parallel jobs for the same month only hit
+ * the API once.
+ */
+async function ensureBlurrTab(
+  sheets:        ReturnType<typeof getSheetsClient>,
+  spreadsheetId: string,
+  tabName:       string,
+): Promise<void> {
+  if (blurrTabCache.has(tabName)) return
+
+  const meta   = await sheets.spreadsheets.get({ spreadsheetId })
+  const exists = meta.data.sheets?.some(s => s.properties?.title === tabName)
+
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title: tabName } } }],
+      },
+    })
+  }
+
+  blurrTabCache.add(tabName)
+}
 
 /**
  * Writes aggregated Blurr Daily Stats for `date` (YYYY-MM-DD) into the
  * dedicated stats spreadsheet (BLURR_DAILY_STATS_SPREADSHEET_ID).
  *
- * Sheet layout (single tab, no month tabs):
+ * One tab per calendar month (e.g. "May 2026"). The tab is created
+ * automatically if it does not yet exist.
+ *
+ * Sheet layout per tab:
  *   Row 1: headers  — Date | Total Daily Gross Sales | Total Orders | Shopify Fees |
  *                     Collected Sales Tax | Total Units | Total Daily Refunds | [products…]
  *   Row 2+: one data row per date
  *
  * Write logic:
- *   1. Read header row — create it if missing, extend with new product columns if needed.
- *   2. Scan column A for the date label — update in place if found, append if not.
+ *   1. Ensure the monthly tab exists (create if missing).
+ *   2. Read header row — create it if missing, extend with new product columns if needed.
+ *   3. Scan column A for the date label — update in place if found, append if not.
  */
 export async function writeBlurrDailyStatsToSheet(
   date:  string,
@@ -326,16 +367,12 @@ export async function writeBlurrDailyStatsToSheet(
   }
 
   const sheets    = getSheetsClient()
-  const dateLabel = getBlurrDateLabel(date)
+  const tabName   = getBlurrTabName(date)    // e.g. "May 2026"
+  const dateLabel = getBlurrDateLabel(date)  // e.g. "May 11, 2026"
+  const q         = (range: string) => `'${tabName}'!${range}`
 
-  // ── 0. Resolve the first sheet's actual title ─────────────────────────────
-  // Cache the sheet title in module scope to avoid repeated metadata reads
-  if (!cachedBlurrSheetTitle) {
-    const meta       = await sheets.spreadsheets.get({ spreadsheetId })
-    cachedBlurrSheetTitle = meta.data.sheets?.[0]?.properties?.title ?? 'Sheet1'
-  }
-  const sheetTitle = cachedBlurrSheetTitle
-  const q          = (range: string) => `'${sheetTitle}'!${range}`
+  // ── 0. Ensure the monthly tab exists ──────────────────────────────────────
+  await ensureBlurrTab(sheets, spreadsheetId, tabName)
 
   // ── 1. Read header row ────────────────────────────────────────────────────
 
@@ -345,14 +382,11 @@ export async function writeBlurrDailyStatsToSheet(
   })
   let headers: string[] = (headerRes.data.values?.[0] ?? []).map(String)
 
-  // Build a sorted list of all product columns needed this run
   const newProducts = Object.keys(stats.productUnits)
     .filter(p => !headers.includes(p))
     .sort()
 
-  const needsHeaderInit = headers.length === 0
-
-  if (needsHeaderInit) {
+  if (headers.length === 0) {
     headers = [...BLURR_STATS_FIXED_HEADERS, ...Object.keys(stats.productUnits).sort()]
     await sheets.spreadsheets.values.update({
       spreadsheetId,
@@ -361,7 +395,6 @@ export async function writeBlurrDailyStatsToSheet(
       requestBody:      { values: [headers] },
     })
   } else if (newProducts.length > 0) {
-    // Append new product columns to the right of the existing headers
     headers = [...headers, ...newProducts]
     const startCol = columnLetter(headers.length - newProducts.length + 1)
     const endCol   = columnLetter(headers.length)
@@ -382,13 +415,9 @@ export async function writeBlurrDailyStatsToSheet(
   const colAValues = (colARes.data.values ?? []).map(r => String(r[0] ?? '').trim())
 
   let rowNumber = colAValues.findIndex(v => v === dateLabel)
-
-  if (rowNumber === -1) {
-    // Append a new row — rowNumber becomes the next available row (1-indexed)
-    rowNumber = colAValues.length + 1
-  } else {
-    rowNumber = rowNumber + 1  // convert 0-indexed to 1-indexed
-  }
+  rowNumber = rowNumber === -1
+    ? colAValues.length + 1   // append
+    : rowNumber + 1           // 0-indexed → 1-indexed
 
   // ── 3. Build the row values in header order ───────────────────────────────
 
@@ -419,6 +448,7 @@ export async function writeBlurrDailyStatsToSheet(
     rowNumber,
     ordersCount: stats.totalOrders,
     date,
+    tabName,
   }
 }
 
