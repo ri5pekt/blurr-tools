@@ -67,7 +67,7 @@ fastify.decorate('authenticate', async function (
 
 fastify.get('/api/health', async () => ({
   status: 'ok',
-    version: '0.6.2',
+    version: '0.6.4',
   timestamp: new Date().toISOString(),
 }))
 
