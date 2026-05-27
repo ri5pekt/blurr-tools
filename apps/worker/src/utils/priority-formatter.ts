@@ -47,6 +47,18 @@ function formatDate(isoDate: string): string {
   return `${day}/${month}/${year}`
 }
 
+// ─── SKU rewrites ─────────────────────────────────────────────────────────────
+// Maps Shopify SKUs to the barcode value that Priority expects.
+// Add new entries here whenever a SKU needs to be remapped.
+
+const SKU_REWRITES: Record<string, string> = {
+  'Insure01': '0001',
+}
+
+function rewriteSku(sku: string): string {
+  return SKU_REWRITES[sku] ?? sku
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 /**
@@ -99,7 +111,7 @@ export function formatOrdersToPriorityTxt(orders: ShopifyOrder[]): string {
     // ── Line 5: line items ────────────────────────────────────────────────────
     // 5  BARCODE  TQUANT  PRICE  PERCENT  TOTPRICE
     for (const item of regularItems) {
-      const barcode    = item.sku || String(item.id)
+      const barcode    = rewriteSku(item.sku || String(item.id))
       const qty        = item.quantity
       const lineTotal  = parseFloat(item.price) * item.quantity
 
