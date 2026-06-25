@@ -1,6 +1,6 @@
 {
   "name": "blurr-tools",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "packageManager": "pnpm@10.10.0",
   "private": true,
   "engines": {

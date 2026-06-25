@@ -292,31 +292,42 @@ export async function fetchOrdersForPriorityRange(dateFrom: string, dateTo: stri
 
 /**
  * Fetches specific orders by their Shopify IDs.
- * Batches requests in groups of 250 to stay within Shopify limits.
+ * Fetches orders by their order numbers (the short "#5846"-style numbers users enter).
+ * Shopify's name filter only accepts one value per request, so we fire up to 10
+ * requests in parallel and collect the results.
  */
 export async function fetchOrdersByIds(orderIds: (string | number)[]): Promise<ShopifyOrder[]> {
   const token = await getAccessToken()
   const all: ShopifyOrder[] = []
 
-  for (let i = 0; i < orderIds.length; i += 250) {
-    const batch = orderIds.slice(i, i + 250)
-    const params = new URLSearchParams({
-      ids:    batch.join(','),
-      status: 'any',
-      limit:  '250',
-      fields: PRIORITY_ORDERS_FIELDS,
-    })
-    const path = `/orders.json?${params.toString()}`
+  // Process in parallel batches of 10 to stay within Shopify's rate limits
+  const CONCURRENCY = 10
+  for (let i = 0; i < orderIds.length; i += CONCURRENCY) {
+    const batch = orderIds.slice(i, i + CONCURRENCY)
+    const results = await Promise.all(batch.map(async (orderId) => {
+      // Strip leading # if present, then prefix with # as Shopify expects
+      const name = `#${String(orderId).replace(/^#/, '')}`
+      const params = new URLSearchParams({
+        name,
+        status: 'any',
+        limit:  '1',
+        fields: PRIORITY_ORDERS_FIELDS,
+      })
+      const path = `/orders.json?${params.toString()}`
 
-    const res = await shopifyFetch(path, token)
+      const res = await shopifyFetch(path, token)
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`Shopify orders fetch failed for order ${name} (${res.status}): ${text}`)
+      }
 
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`Shopify orders fetch failed (${res.status}): ${text}`)
+      const data = await res.json() as { orders: ShopifyOrder[] }
+      return data.orders
+    }))
+
+    for (const orders of results) {
+      all.push(...orders)
     }
-
-    const data = await res.json() as { orders: ShopifyOrder[] }
-    all.push(...data.orders)
   }
 
   return all
