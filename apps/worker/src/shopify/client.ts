@@ -291,42 +291,99 @@ export async function fetchOrdersForPriorityRange(dateFrom: string, dateTo: stri
 }
 
 /**
- * Fetches specific orders by their Shopify IDs.
- * Fetches orders by their order numbers (the short "#5846"-style numbers users enter).
- * Shopify's name filter only accepts one value per request, so we fire up to 10
- * requests in parallel and collect the results.
+ * Fetches orders by the short order numbers users enter (e.g. 5846, #5846).
+ *
+ * Two-stage lookup:
+ *   Stage 1 — exact name search: `name=#5846` (fast, covers regular orders).
+ *   Stage 2 — upsell fallback: for numbers not found in stage 1, fetch the
+ *     parent order `name=#5845` to get its timestamp, then scan a ±1 h window
+ *     for orders whose name starts with `#5845-` (e.g. "#5845-Presell Wrinkle
+ *     Remover"). These are post-purchase upsell / split orders created by apps
+ *     like OrderSplit Pro that carry the parent's number as a prefix.
  */
 export async function fetchOrdersByIds(orderIds: (string | number)[]): Promise<ShopifyOrder[]> {
-  const token = await getAccessToken()
-  const all: ShopifyOrder[] = []
+  const token      = await getAccessToken()
+  const all:       ShopifyOrder[] = []
+  const notFound:  number[]       = []
 
-  // Process in parallel batches of 10 to stay within Shopify's rate limits
+  // ── Stage 1: exact name search (10 concurrent requests) ────────────────────
   const CONCURRENCY = 10
   for (let i = 0; i < orderIds.length; i += CONCURRENCY) {
-    const batch = orderIds.slice(i, i + CONCURRENCY)
+    const batch   = orderIds.slice(i, i + CONCURRENCY)
     const results = await Promise.all(batch.map(async (orderId) => {
-      // Strip leading # if present, then prefix with # as Shopify expects
-      const name = `#${String(orderId).replace(/^#/, '')}`
+      const raw  = String(orderId).replace(/^#/, '')
+      const num  = parseInt(raw, 10)
+      const name = `#${raw}`
       const params = new URLSearchParams({
-        name,
-        status: 'any',
-        limit:  '1',
-        fields: PRIORITY_ORDERS_FIELDS,
+        name, status: 'any', limit: '1', fields: PRIORITY_ORDERS_FIELDS,
       })
-      const path = `/orders.json?${params.toString()}`
-
-      const res = await shopifyFetch(path, token)
+      const res = await shopifyFetch(`/orders.json?${params.toString()}`, token)
       if (!res.ok) {
         const text = await res.text()
         throw new Error(`Shopify orders fetch failed for order ${name} (${res.status}): ${text}`)
       }
-
       const data = await res.json() as { orders: ShopifyOrder[] }
-      return data.orders
+      return { num, orders: data.orders }
     }))
 
-    for (const orders of results) {
-      all.push(...orders)
+    for (const { num, orders } of results) {
+      if (orders.length > 0) {
+        all.push(...orders)
+      } else {
+        notFound.push(num)
+      }
+    }
+  }
+
+  // ── Stage 2: upsell fallback ────────────────────────────────────────────────
+  // For each not-found number N, look up the parent order #(N-1) to get its
+  // creation timestamp, then scan a ±1 h window for any order whose name
+  // starts with "#(N-1)-" (the naming convention for upsell orders).
+  for (const num of notFound) {
+    const prevNum  = num - 1
+    const prevName = `#${prevNum}`
+
+    // 1. Fetch the parent order for its timestamp
+    const parentParams = new URLSearchParams({
+      name: prevName, status: 'any', limit: '1', fields: 'id,name,created_at',
+    })
+    const parentRes = await shopifyFetch(`/orders.json?${parentParams.toString()}`, token)
+    if (!parentRes.ok) {
+      console.warn(`[Priority] Order #${num} not found and parent ${prevName} fetch failed`)
+      continue
+    }
+    const parentData = await parentRes.json() as { orders: Array<{ id: number; name: string; created_at: string }> }
+    if (parentData.orders.length === 0) {
+      console.warn(`[Priority] Order #${num} not found and parent ${prevName} does not exist`)
+      continue
+    }
+
+    // 2. Scan orders created within ±1 hour of the parent
+    const parentCreatedAt = new Date(parentData.orders[0].created_at)
+    const minTime = new Date(parentCreatedAt.getTime() - 60 * 60 * 1000)
+    const maxTime = new Date(parentCreatedAt.getTime() + 60 * 60 * 1000)
+
+    const windowParams = new URLSearchParams({
+      created_at_min: minTime.toISOString(),
+      created_at_max: maxTime.toISOString(),
+      status: 'any',
+      limit:  '50',
+      fields: PRIORITY_ORDERS_FIELDS,
+    })
+    const windowRes = await shopifyFetch(`/orders.json?${windowParams.toString()}`, token)
+    if (!windowRes.ok) {
+      console.warn(`[Priority] Order #${num} not found and window fetch failed`)
+      continue
+    }
+
+    const windowData  = await windowRes.json() as { orders: ShopifyOrder[] }
+    const upsellPrefix = `${prevName}-`
+    const upsells      = windowData.orders.filter(o => o.name.startsWith(upsellPrefix))
+
+    if (upsells.length > 0) {
+      all.push(...upsells)
+    } else {
+      console.warn(`[Priority] Order #${num} not found — no upsell orders matching "${upsellPrefix}*" near ${prevName}`)
     }
   }
 
