@@ -12,8 +12,9 @@ const envSchema = z.object({
   GOOGLE_OAUTH_CLIENT_ID:     z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
   GOOGLE_OAUTH_REFRESH_TOKEN: z.string().optional(),
-  DAILY_ORDERS_SPREADSHEET_ID:   z.string().optional(),
+  DAILY_ORDERS_SPREADSHEET_ID:      z.string().optional(),
   BLURR_DAILY_STATS_SPREADSHEET_ID: z.string().optional(),
+  METORIK_API_KEY:                  z.string().optional(),
   EXPORTS_DIR: z.string().default('/app/exports'),
 })
 
