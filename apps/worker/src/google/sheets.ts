@@ -1,7 +1,5 @@
 import { google } from 'googleapis'
 import { env } from '../env.js'
-import type { ShopifyOrder } from '../shopify/client.js'
-import { getCustomerOrderCounts } from '../shopify/client.js'
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -49,84 +47,14 @@ function getDateLabel(date: string): string {
 
 // ─── Stats aggregation ────────────────────────────────────────────────────────
 
-interface DailyStats {
-  grossRevenue:      number  // sum of total_price (before refunds)
-  totalRefunds:      number  // sum of all refund transaction amounts
-  netRevenue:        number  // grossRevenue - totalRefunds
-  newCustomers:      number
-  returningOrders:   number
-  totalOrders:       number
-  unitsSold:         number
-}
-
-function computeRefundTotal(order: ShopifyOrder): number {
-  // Two complementary approaches — take the larger to handle all refund types:
-  // 1. total_price - current_total_price  → catches line-item / full refunds
-  // 2. sum of refund transactions         → catches adjustment-only partial refunds
-  const byPrice = Math.max(
-    0,
-    parseFloat(order.total_price) - parseFloat(order.current_total_price ?? order.total_price),
-  )
-  let byTxn = 0
-  for (const r of order.refunds ?? []) {
-    for (const txn of r.transactions ?? []) {
-      if (txn.kind === 'refund' && txn.status === 'success') {
-        byTxn += parseFloat(txn.amount ?? '0')
-      }
-    }
-  }
-  return Math.max(byPrice, byTxn)
-}
-
-async function aggregateStats(orders: ShopifyOrder[], date: string): Promise<DailyStats> {
-  let grossRevenue    = 0
-  let totalRefunds    = 0
-  let newCustomers    = 0
-  let returningOrders = 0
-  let unitsSold       = 0
-
-  // Exclude $0 orders (test/draft checkouts, voided $0 cancellations) and
-  // Shopify admin draft orders. Cancelled orders that had real revenue are kept
-  // because Metorik counts them — their gross and refund both appear, netting $0.
-  const billableOrders = orders.filter(o =>
-    o.source_name !== 'shopify_draft_order' &&
-    parseFloat(o.total_price) > 0,
-  )
-
-  // Fetch orders_count for all unique customers in one batch call.
-  // orders_count === 1 means this is their first-ever order → new customer.
-  // Guest checkouts (no customer) are always counted as new.
-  const customerIds    = [...new Set(billableOrders.map(o => o.customer?.id).filter((id): id is number => id != null))]
-  const ordersCounts   = customerIds.length > 0 ? await getCustomerOrderCounts(customerIds) : {}
-
-  for (const o of billableOrders) {
-    grossRevenue  += parseFloat(o.total_price)
-    totalRefunds  += computeRefundTotal(o)
-    unitsSold     += o.line_items.reduce((s, li) => s + (li.quantity ?? 0), 0)
-
-    const count       = o.customer?.id != null ? (ordersCounts[o.customer.id] ?? 0) : 0
-    const isReturning = count > 1
-    if (isReturning) {
-      returningOrders++
-    } else {
-      newCustomers++ // first-ever order, or guest checkout
-    }
-  }
-
-  // Round to 2 dp
-  grossRevenue = Math.round(grossRevenue * 100) / 100
-  totalRefunds = Math.round(totalRefunds * 100) / 100
-  const netRevenue = Math.round((grossRevenue - totalRefunds) * 100) / 100
-
-  return {
-    grossRevenue,
-    totalRefunds,
-    netRevenue,
-    newCustomers,
-    returningOrders,
-    totalOrders: billableOrders.length,
-    unitsSold,
-  }
+export interface DailyStats {
+  grossRevenue:    number  // Metorik revenue-by-date gross
+  netRevenue:      number  // Metorik revenue-by-date net  (= dashboard "Net Revenue")
+  totalRefunds:    number  // Metorik revenue-by-date refunds (by refund date)
+  newCustomers:    number  // Metorik customers-by-date    (= dashboard "New Customers")
+  returningOrders: number  // Metorik new-returning-by-date returning_orders
+  totalOrders:     number  // Metorik revenue-by-date orders
+  unitsSold:       number  // Metorik revenue-by-date items
 }
 
 // ─── Row finder ───────────────────────────────────────────────────────────────
@@ -200,8 +128,8 @@ export interface WriteOrdersResult {
  *   M = Website Units
  */
 export async function writeOrdersToSheet(
-  date:   string,
-  orders: ShopifyOrder[],
+  date:  string,
+  stats: DailyStats,
 ): Promise<WriteOrdersResult> {
   const spreadsheetId = env.DAILY_ORDERS_SPREADSHEET_ID
   if (!spreadsheetId) {
@@ -219,8 +147,6 @@ export async function writeOrdersToSheet(
       `Make sure the monthly sheet exists and column A is pre-filled with dates.`,
     )
   }
-
-  const stats = await aggregateStats(orders, date)
 
   // ISO timestamp for the "Last Update" column (F)
   const lastUpdate = new Date().toISOString().replace('T', ' ').slice(0, 19)
@@ -254,7 +180,7 @@ export async function writeOrdersToSheet(
 
   const sheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`
 
-  return { sheetUrl, rowsWritten: 1, ordersCount: orders.length, tabName, rowNumber }
+  return { sheetUrl, rowsWritten: 1, ordersCount: stats.totalOrders, tabName, rowNumber }
 }
 
 // ─── Blurr Daily Stats ────────────────────────────────────────────────────────

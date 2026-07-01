@@ -4,7 +4,7 @@ import { db } from '../db.js'
 import { jobs } from '@blurr-tools/db'
 import { startJob, updateJobProgress, completeJob, failJob } from '../utils/job.js'
 import { log } from '../logger.js'
-import { fetchOrdersForDate } from '../shopify/client.js'
+import { fetchMetorikDailyStats } from '../metorik/client.js'
 import { writeOrdersToSheet } from '../google/sheets.js'
 
 interface DailyOrdersJobData {
@@ -60,43 +60,50 @@ export function registerDailyOrdersProcessor(): Worker {
       })
 
       try {
-        // Step 1: Fetch orders from Shopify (0–50%)
+        // Step 1: Fetch stats from Metorik (0–70%)
         await updateJobProgress(dbJobId, 10)
 
         log({
           level:   'info',
           source:  'worker',
-          action:  'shopify.fetch.started',
-          message: `Fetching orders from Shopify for ${date}`,
+          action:  'metorik.fetch.started',
+          message: `Fetching daily stats from Metorik for ${date}`,
           feature: 'daily_orders_export',
           jobId:   dbJobId,
         })
 
-        const orders = await fetchOrdersForDate(date)
-
-        await updateJobProgress(dbJobId, 50)
+        const metorikStats = await fetchMetorikDailyStats(date)
+        await updateJobProgress(dbJobId, 60)
 
         log({
           level:   'info',
           source:  'worker',
-          action:  'shopify.fetch.completed',
-          message: `Fetched ${orders.length} orders from Shopify for ${date}`,
+          action:  'metorik.fetch.completed',
+          message: `Metorik stats for ${date}: ${metorikStats.totalOrders} orders, $${metorikStats.netRevenue} net, $${metorikStats.totalRefunds} refunds`,
           feature: 'daily_orders_export',
           jobId:   dbJobId,
-          meta:    { ordersCount: orders.length, date },
+          meta:    { totalOrders: metorikStats.totalOrders, netRevenue: metorikStats.netRevenue, date },
         })
 
-        // Step 2: Write to Google Sheets (50–100%)
+        // Step 2: Write to Google Sheets (60–100%)
         log({
           level:   'info',
           source:  'worker',
           action:  'sheets.write.started',
-          message: `Writing ${orders.length} orders to Google Sheets`,
+          message: `Writing daily stats to Google Sheets for ${date}`,
           feature: 'daily_orders_export',
           jobId:   dbJobId,
         })
 
-        const result = await writeOrdersToSheet(date, orders)
+        const result = await writeOrdersToSheet(date, {
+          grossRevenue:    metorikStats.grossSales,
+          netRevenue:      metorikStats.netRevenue,
+          totalRefunds:    metorikStats.totalRefunds,
+          newCustomers:    metorikStats.newCustomers,
+          returningOrders: metorikStats.returningCustomerOrders,
+          totalOrders:     metorikStats.totalOrders,
+          unitsSold:       metorikStats.totalUnits,
+        })
 
         await completeJob(dbJobId, {
           ordersCount: result.ordersCount,
