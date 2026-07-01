@@ -288,21 +288,27 @@ const blurrTabCache = new Set<string>()
 const BLURR_STATS_FIXED_HEADERS = [
   'Date',
   'Total Daily Gross Sales',
+  'Net Website Revenue',
   'Total Orders',
   'Shopify Fees',
   'Collected Sales Tax',
   'Total Units',
   'Total Daily Refunds',
+  'New Customers',
+  'Returning Customer Orders',
 ]
 
 export interface BlurrDailyStats {
-  grossSales:  number
-  totalOrders: number
-  shopifyFees: number
-  salesTax:    number
-  totalUnits:  number
-  totalRefunds: number
-  productUnits: Record<string, number>  // productTitle → units sold
+  grossSales:              number
+  netRevenue:              number
+  totalOrders:             number
+  shopifyFees:             number
+  salesTax:                number
+  totalUnits:              number
+  totalRefunds:            number
+  newCustomers:            number
+  returningCustomerOrders: number
+  productUnits:            Record<string, number>  // productTitle → units sold
 }
 
 export interface WriteBlurrStatsResult {
@@ -386,6 +392,10 @@ export async function writeBlurrDailyStatsToSheet(
     .filter(p => !headers.includes(p))
     .sort()
 
+  // Also catch any fixed headers that weren't in the tab yet (e.g. newly added columns)
+  const missingFixed = BLURR_STATS_FIXED_HEADERS.filter(h => !headers.includes(h))
+  const columnsToAdd = [...missingFixed, ...newProducts]
+
   if (headers.length === 0) {
     headers = [...BLURR_STATS_FIXED_HEADERS, ...Object.keys(stats.productUnits).sort()]
     await sheets.spreadsheets.values.update({
@@ -394,15 +404,15 @@ export async function writeBlurrDailyStatsToSheet(
       valueInputOption: 'USER_ENTERED',
       requestBody:      { values: [headers] },
     })
-  } else if (newProducts.length > 0) {
-    headers = [...headers, ...newProducts]
-    const startCol = columnLetter(headers.length - newProducts.length + 1)
+  } else if (columnsToAdd.length > 0) {
+    headers = [...headers, ...columnsToAdd]
+    const startCol = columnLetter(headers.length - columnsToAdd.length + 1)
     const endCol   = columnLetter(headers.length)
     await sheets.spreadsheets.values.update({
       spreadsheetId,
       range:            q(`${startCol}1:${endCol}1`),
       valueInputOption: 'USER_ENTERED',
-      requestBody:      { values: [newProducts] },
+      requestBody:      { values: [columnsToAdd] },
     })
   }
 
@@ -423,14 +433,17 @@ export async function writeBlurrDailyStatsToSheet(
 
   const row: (string | number)[] = headers.map(h => {
     switch (h) {
-      case 'Date':                    return dateLabel
-      case 'Total Daily Gross Sales': return stats.grossSales
-      case 'Total Orders':            return stats.totalOrders
-      case 'Shopify Fees':            return stats.shopifyFees
-      case 'Collected Sales Tax':     return stats.salesTax
-      case 'Total Units':             return stats.totalUnits
-      case 'Total Daily Refunds':     return stats.totalRefunds
-      default:                        return stats.productUnits[h] ?? 0
+      case 'Date':                         return dateLabel
+      case 'Total Daily Gross Sales':      return stats.grossSales
+      case 'Net Website Revenue':          return stats.netRevenue
+      case 'Total Orders':                 return stats.totalOrders
+      case 'Shopify Fees':                 return stats.shopifyFees
+      case 'Collected Sales Tax':          return stats.salesTax
+      case 'Total Units':                  return stats.totalUnits
+      case 'Total Daily Refunds':          return stats.totalRefunds
+      case 'New Customers':                return stats.newCustomers
+      case 'Returning Customer Orders':    return stats.returningCustomerOrders
+      default:                             return stats.productUnits[h] ?? 0
     }
   })
 

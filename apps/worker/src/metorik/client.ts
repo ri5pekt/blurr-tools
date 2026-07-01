@@ -3,15 +3,17 @@ import { env } from '../env.js'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface MetorikDailyStats {
-  grossSales:    number   // gross revenue before discounts/refunds
-  totalOrders:   number
-  totalUnits:    number   // items sold
-  totalRefunds:  number   // refund amount (by refund date, matches dashboard)
-  refundsCount:  number
-  discounts:     number
-  salesTax:      number
-  netRevenue:    number
-  productUnits:  Record<string, number>  // productTitle → gross units sold
+  grossSales:              number   // gross revenue before discounts/refunds
+  totalOrders:             number
+  totalUnits:              number   // items sold
+  totalRefunds:            number   // refund amount (by refund date, matches dashboard)
+  refundsCount:            number
+  discounts:               number
+  salesTax:                number
+  netRevenue:              number   // = Metorik dashboard "Net Revenue"
+  newCustomers:            number   // = Metorik dashboard "New Customers" (customers-by-date)
+  returningCustomerOrders: number   // orders from returning customers
+  productUnits:            Record<string, number>  // productTitle → gross units sold
 }
 
 interface RevenueByDateResponse {
@@ -24,6 +26,17 @@ interface RevenueByDateResponse {
     discounts:      number
     taxes:          number
     net:            number
+  }>
+}
+
+interface CustomersByDateResponse {
+  data: Array<{ customers: number }>
+}
+
+interface NewReturningResponse {
+  data: Array<{
+    new_customers:     number
+    returning_orders:  number
   }>
 }
 
@@ -77,31 +90,49 @@ async function metorikFetch(path: string): Promise<Response> {
  * see in the Metorik UI regardless of which day the original order was placed.
  */
 export async function fetchMetorikDailyStats(date: string): Promise<MetorikDailyStats> {
-  // ── Revenue totals ──────────────────────────────────────────────────────────
-  const revParams = new URLSearchParams({
-    start_date: date,
-    end_date:   date,
-    group_by:   'day',
-  })
-  const revRes = await metorikFetch(`/reports/revenue-by-date?${revParams.toString()}`)
+  const dateParams = new URLSearchParams({ start_date: date, end_date: date, group_by: 'day' })
+
+  // ── Revenue totals + customer counts — fire in parallel ────────────────────
+  const [revRes, custRes, nrRes] = await Promise.all([
+    metorikFetch(`/reports/revenue-by-date?${dateParams.toString()}`),
+    metorikFetch(`/reports/customers-by-date?${dateParams.toString()}`),
+    metorikFetch(`/reports/orders-new-returning-customers-by-date?${dateParams.toString()}`),
+  ])
+
   if (!revRes.ok) {
     const text = await revRes.text()
     throw new Error(`Metorik revenue-by-date failed (${revRes.status}): ${text}`)
   }
-  const revData = await revRes.json() as RevenueByDateResponse
-  const rev     = revData.data[0]
+  if (!custRes.ok) {
+    const text = await custRes.text()
+    throw new Error(`Metorik customers-by-date failed (${custRes.status}): ${text}`)
+  }
+  if (!nrRes.ok) {
+    const text = await nrRes.text()
+    throw new Error(`Metorik new-returning-customers-by-date failed (${nrRes.status}): ${text}`)
+  }
+
+  const revData  = await revRes.json()  as RevenueByDateResponse
+  const custData = await custRes.json() as CustomersByDateResponse
+  const nrData   = await nrRes.json()   as NewReturningResponse
+
+  const rev  = revData.data[0]
+  const cust = custData.data[0]
+  const nr   = nrData.data[0]
 
   if (!rev) {
     return {
-      grossSales:   0,
-      totalOrders:  0,
-      totalUnits:   0,
-      totalRefunds: 0,
-      refundsCount: 0,
-      discounts:    0,
-      salesTax:     0,
-      netRevenue:   0,
-      productUnits: {},
+      grossSales:              0,
+      totalOrders:             0,
+      totalUnits:              0,
+      totalRefunds:            0,
+      refundsCount:            0,
+      discounts:               0,
+      salesTax:                0,
+      netRevenue:              0,
+      newCustomers:            0,
+      returningCustomerOrders: 0,
+      productUnits:            {},
     }
   }
 
@@ -137,14 +168,16 @@ export async function fetchMetorikDailyStats(date: string): Promise<MetorikDaily
   }
 
   return {
-    grossSales:   Math.round(rev.gross         * 100) / 100,
-    totalOrders:  rev.orders,
-    totalUnits:   rev.items,
-    totalRefunds: Math.round(rev.refunds       * 100) / 100,
-    refundsCount: rev.refunds_count,
-    discounts:    Math.round(rev.discounts     * 100) / 100,
-    salesTax:     Math.round(rev.taxes         * 100) / 100,
-    netRevenue:   Math.round(rev.net           * 100) / 100,
+    grossSales:              Math.round(rev.gross         * 100) / 100,
+    totalOrders:             rev.orders,
+    totalUnits:              rev.items,
+    totalRefunds:            Math.round(rev.refunds       * 100) / 100,
+    refundsCount:            rev.refunds_count,
+    discounts:               Math.round(rev.discounts     * 100) / 100,
+    salesTax:                Math.round(rev.taxes         * 100) / 100,
+    netRevenue:              Math.round(rev.net           * 100) / 100,
+    newCustomers:            cust?.customers              ?? 0,
+    returningCustomerOrders: nr?.returning_orders         ?? 0,
     productUnits,
   }
 }

@@ -112,13 +112,16 @@ export function registerBlurrDailyStatsProcessor(): Worker {
 
         // Step 3: Write to Google Sheets (70–100%)
         const stats = {
-          grossSales:   metorikStats.grossSales,
-          totalOrders:  metorikStats.totalOrders,
-          shopifyFees:  Math.round(shopifyFees * 100) / 100,
-          salesTax:     metorikStats.salesTax,
-          totalUnits:   metorikStats.totalUnits,
-          totalRefunds: metorikStats.totalRefunds,
-          productUnits: metorikStats.productUnits,
+          grossSales:              metorikStats.grossSales,
+          netRevenue:              metorikStats.netRevenue,
+          totalOrders:             metorikStats.totalOrders,
+          shopifyFees:             Math.round(shopifyFees * 100) / 100,
+          salesTax:                metorikStats.salesTax,
+          totalUnits:              metorikStats.totalUnits,
+          totalRefunds:            metorikStats.totalRefunds,
+          newCustomers:            metorikStats.newCustomers,
+          returningCustomerOrders: metorikStats.returningCustomerOrders,
+          productUnits:            metorikStats.productUnits,
         }
 
         log({
