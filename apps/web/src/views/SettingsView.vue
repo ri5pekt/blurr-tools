@@ -218,10 +218,10 @@
               <div class="schedule-name">{{ s.displayName }}</div>
               <div class="schedule-meta">
                 <span v-if="s.data?.cron" class="schedule-meta-pill">
-                  <i class="pi pi-clock" /> {{ s.data.cron }}
+                  <i class="pi pi-clock" /> {{ formatScheduleCrons(s.data) }}
                 </span>
-                <span v-if="s.data?.options?.timezone" class="schedule-meta-pill">
-                  <i class="pi pi-globe" /> {{ s.data.options.timezone }}
+                <span v-if="s.data?.timezone" class="schedule-meta-pill">
+                  <i class="pi pi-globe" /> {{ s.data.timezone }}
                 </span>
                 <span v-if="!s.data" class="schedule-meta-pill schedule-meta-pill--muted">
                   Not configured
@@ -259,6 +259,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { parseCrons } from '@blurr-tools/types'
 import { useAuthStore } from '../stores/auth.js'
 import { apiClient } from '../api/client.js'
 
@@ -373,8 +374,24 @@ interface ScheduleData {
   feature:  string
   name:     string
   cron:     string
+  crons?:   string[]
+  timezone: string
   enabled:  boolean
-  options:  { timezone?: string }
+  options:  { timezone?: string } | null
+}
+
+function formatScheduleCrons(data: ScheduleData): string {
+  const crons = data.crons?.length ? data.crons : parseCrons(data.cron)
+  return crons
+    .map((c) => {
+      const [minute, hour] = c.split(' ')
+      const h = parseInt(hour ?? '0', 10)
+      const m = (minute ?? '0').padStart(2, '0')
+      const period = h < 12 ? 'AM' : 'PM'
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
+      return `${h12}:${m} ${period}`
+    })
+    .join(', ')
 }
 
 interface ScheduleEntry {

@@ -1,23 +1,30 @@
 import { eq } from 'drizzle-orm'
 import { db } from './db.js'
 import { scheduledExports } from '@blurr-tools/db'
+import { parseCrons } from '@blurr-tools/types'
 import { queues } from './queues.js'
 
 const SYNC_INTERVAL = 5 * 60 * 1000 // re-sync every 5 minutes
 const JOB_NAME      = 'scheduled'
 
 interface FeatureScheduleState {
-  lastCron:    string | null
-  lastEnabled: boolean | null
+  lastCron:     string | null
+  lastEnabled:  boolean | null
+  lastTimezone: string | null
 }
 
 const state: Record<string, FeatureScheduleState> = {
-  daily_orders_export:     { lastCron: null, lastEnabled: null },
-  blurr_daily_stats_export: { lastCron: null, lastEnabled: null },
+  daily_orders_export:      { lastCron: null, lastEnabled: null, lastTimezone: null },
+  blurr_daily_stats_export: { lastCron: null, lastEnabled: null, lastTimezone: null },
+}
+
+function isScheduledJobName(name: string): boolean {
+  return name === JOB_NAME || name.startsWith(`${JOB_NAME}:`)
 }
 
 /**
- * Syncs the BullMQ repeatable job for a single feature with the schedule stored in the DB.
+ * Syncs BullMQ repeatable jobs for a feature with the schedule stored in the DB.
+ * Supports multiple daily cron expressions stored as a plain string or JSON array.
  * Idempotent — only removes/adds if something changed.
  */
 async function syncFeatureSchedule(feature: 'daily_orders_export' | 'blurr_daily_stats_export'): Promise<void> {
@@ -35,32 +42,44 @@ async function syncFeatureSchedule(feature: 'daily_orders_export' | 'blurr_daily
   const cron     = schedule?.cron     ?? null
   const timezone = schedule?.timezone ?? 'America/New_York'
 
-  const s       = state[feature]!
-  const changed = enabled !== s.lastEnabled || cron !== s.lastCron
+  const s = state[feature]!
+  const changed =
+    enabled !== s.lastEnabled ||
+    cron !== s.lastCron ||
+    timezone !== s.lastTimezone
 
   if (!changed) return
 
   const repeatableJobs = await queue.getRepeatableJobs()
   for (const rj of repeatableJobs) {
-    if (rj.name === JOB_NAME) {
+    if (isScheduledJobName(rj.name)) {
       await queue.removeRepeatableByKey(rj.key)
       console.log(`[scheduler] Removed old repeatable job for ${feature}:`, rj.key)
     }
   }
 
-  if (enabled && cron) {
-    await queue.add(
-      JOB_NAME,
-      { date: 'auto' },
-      { repeat: { pattern: cron, tz: timezone } },
+  const crons = cron ? parseCrons(cron) : []
+
+  if (enabled && crons.length > 0) {
+    for (const pattern of crons) {
+      // Distinct job name per pattern so BullMQ keeps separate repeatable keys
+      const name = `${JOB_NAME}:${pattern}`
+      await queue.add(
+        name,
+        { date: 'auto' },
+        { repeat: { pattern, tz: timezone } },
+      )
+    }
+    console.log(
+      `[scheduler] Registered ${crons.length} repeatable job(s) for ${feature}: ${crons.join(', ')} (${timezone})`,
     )
-    console.log(`[scheduler] Registered repeatable job for ${feature}: ${cron} (${timezone})`)
   } else {
     console.log(`[scheduler] Schedule disabled — no repeatable job registered for ${feature}`)
   }
 
-  s.lastEnabled = enabled
-  s.lastCron    = cron
+  s.lastEnabled  = enabled
+  s.lastCron     = cron
+  s.lastTimezone = timezone
 }
 
 async function syncSchedule(): Promise<void> {

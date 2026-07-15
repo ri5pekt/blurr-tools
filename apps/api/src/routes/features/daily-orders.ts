@@ -5,10 +5,16 @@ import { db } from '../../db.js'
 import { jobs, scheduledExports } from '@blurr-tools/db'
 import { queues } from '../../queues.js'
 import { log } from '../../logger.js'
+import {
+  MAX_SCHEDULE_CRONS,
+  parseCrons,
+  serializeCrons,
+  withCrons,
+} from '@blurr-tools/types'
 
-const FEATURE    = 'daily_orders_export' as const
-const DATE_RE    = /^\d{4}-\d{2}-\d{2}$/
-const MAX_RANGE  = 90
+const FEATURE   = 'daily_orders_export' as const
+const DATE_RE   = /^\d{4}-\d{2}-\d{2}$/
+const MAX_RANGE = 90
 
 const exportBodySchema = z.object({
   dateFrom: z.string().regex(DATE_RE, 'Must be YYYY-MM-DD'),
@@ -18,8 +24,12 @@ const exportBodySchema = z.object({
 const scheduleBodySchema = z.object({
   enabled:  z.boolean().optional(),
   cron:     z.string().optional(),
+  crons:    z.array(z.string()).min(1).max(MAX_SCHEDULE_CRONS).optional(),
   timezone: z.string().optional(),
-})
+}).refine(
+  (b) => b.enabled !== undefined || b.cron !== undefined || b.crons !== undefined || b.timezone !== undefined,
+  { message: 'At least one field is required' },
+)
 
 function getDatesInRange(from: string, to: string): string[] {
   const dates: string[] = []
@@ -30,6 +40,16 @@ function getDatesInRange(from: string, to: string): string[] {
     start.setUTCDate(start.getUTCDate() + 1)
   }
   return dates
+}
+
+function resolveCrons(input: { cron?: string; crons?: string[] }): string[] | null {
+  if (input.crons !== undefined) {
+    return parseCrons(serializeCrons(input.crons))
+  }
+  if (input.cron !== undefined) {
+    return parseCrons(input.cron)
+  }
+  return null
 }
 
 export async function dailyOrdersRoutes(fastify: FastifyInstance) {
@@ -95,7 +115,7 @@ export async function dailyOrdersRoutes(fastify: FastifyInstance) {
       .where(eq(scheduledExports.feature, FEATURE))
       .limit(1)
 
-    return schedule ?? null
+    return schedule ? withCrons(schedule) : null
   })
 
   // ─── PUT /api/features/daily-orders/schedule ─────────────────────────────
@@ -112,7 +132,15 @@ export async function dailyOrdersRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Invalid request body', code: 'VALIDATION_ERROR', details: parsed.error.flatten() })
     }
 
-    const { enabled, cron, timezone } = parsed.data
+    const { enabled, timezone } = parsed.data
+    const crons = resolveCrons(parsed.data)
+
+    if (crons !== null && crons.length === 0) {
+      return reply.status(400).send({
+        error: 'At least one valid daily run time is required (e.g. "0 9 * * *")',
+        code:  'INVALID_CRONS',
+      })
+    }
 
     const [existing] = await db
       .select()
@@ -122,8 +150,8 @@ export async function dailyOrdersRoutes(fastify: FastifyInstance) {
 
     const updates: Record<string, unknown> = {}
     if (enabled  !== undefined) updates.enabled  = enabled
-    if (cron     !== undefined) updates.cron     = cron
     if (timezone !== undefined) updates.timezone = timezone
+    if (crons    !== null)      updates.cron     = serializeCrons(crons)
 
     let schedule
 
@@ -140,7 +168,7 @@ export async function dailyOrdersRoutes(fastify: FastifyInstance) {
         .values({
           feature:  FEATURE,
           name:     'Daily Orders Export',
-          cron:     cron     ?? '0 8 * * *',
+          cron:     crons ? serializeCrons(crons) : '0 8 * * *',
           timezone: timezone ?? 'America/New_York',
           enabled:  enabled  ?? false,
         })
@@ -155,9 +183,9 @@ export async function dailyOrdersRoutes(fastify: FastifyInstance) {
       message: 'Daily orders schedule updated',
       feature: FEATURE,
       userId:  request.user.id,
-      meta:    updates,
+      meta:    { ...updates, crons: schedule ? parseCrons(schedule.cron) : undefined },
     })
 
-    return schedule
+    return withCrons(schedule)
   })
 }

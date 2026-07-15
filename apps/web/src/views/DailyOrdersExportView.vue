@@ -96,28 +96,55 @@
 
       <div v-else class="schedule-form">
         <p class="schedule-hint">
-          When enabled, the export runs automatically each day and exports the previous day's orders.
+          Runs at each time below and exports the previous day's stats. Add a morning and afternoon time to refresh twice a day.
         </p>
 
-        <div class="schedule-row">
-          <div class="field">
-            <label>Run time</label>
-            <div class="time-select-wrap">
-              <select v-model="scheduleHour" class="select-input">
-                <option v-for="opt in hourOptions" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </option>
-              </select>
-              <span class="time-colon">:</span>
-              <select v-model="scheduleMinute" class="select-input select-input--sm">
-                <option value="0">00</option>
-                <option value="15">15</option>
-                <option value="30">30</option>
-                <option value="45">45</option>
-              </select>
+        <div class="field">
+          <label>Run times</label>
+          <div class="run-times-list">
+            <div
+              v-for="(slot, idx) in scheduleTimes"
+              :key="idx"
+              class="run-time-row"
+            >
+              <div class="time-select-wrap">
+                <select v-model.number="slot.hour" class="select-input">
+                  <option v-for="opt in hourOptions" :key="opt.value" :value="opt.value">
+                    {{ opt.label }}
+                  </option>
+                </select>
+                <span class="time-colon">:</span>
+                <select v-model.number="slot.minute" class="select-input select-input--sm">
+                  <option :value="0">00</option>
+                  <option :value="15">15</option>
+                  <option :value="30">30</option>
+                  <option :value="45">45</option>
+                </select>
+              </div>
+              <button
+                type="button"
+                class="btn btn-icon-danger"
+                :disabled="scheduleTimes.length <= 1 || isSavingSchedule || !isAdmin"
+                :title="scheduleTimes.length <= 1 ? 'At least one run time is required' : 'Remove run time'"
+                @click="removeRunTime(idx)"
+              >
+                <i class="pi pi-trash" />
+              </button>
             </div>
           </div>
+          <button
+            type="button"
+            class="btn btn-outline btn-add-time"
+            :disabled="scheduleTimes.length >= maxScheduleCrons || isSavingSchedule || !isAdmin"
+            :title="!isAdmin ? 'Admin only' : (scheduleTimes.length >= maxScheduleCrons ? `Maximum ${maxScheduleCrons} run times` : '')"
+            @click="addRunTime"
+          >
+            <i class="pi pi-plus" />
+            Add run time
+          </button>
+        </div>
 
+        <div class="schedule-row">
           <div class="field">
             <label>Timezone</label>
             <select v-model="scheduleTimezone" class="select-input select-input--tz">
@@ -156,7 +183,7 @@
           >
             <i v-if="isSavingSchedule && !togglingEnabled" class="pi pi-spin pi-spinner" />
             <i v-else class="pi pi-save" />
-            Save Time & Timezone
+            Save Times & Timezone
           </button>
 
           <button
@@ -198,9 +225,19 @@ import DatePicker from 'primevue/datepicker'
 import { apiClient } from '../api/client.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useToast } from '../composables/useToast.js'
-import type { Job, ScheduledExport } from '@blurr-tools/types'
+import {
+  MAX_SCHEDULE_CRONS,
+  parseCrons,
+  type Job,
+  type ScheduledExport,
+} from '@blurr-tools/types'
 import JobStatusCard from '../components/JobStatusCard.vue'
 import JobLogsPanel from '../components/JobLogsPanel.vue'
+
+interface ScheduleTimeSlot {
+  hour: number
+  minute: number
+}
 
 const auth        = useAuthStore()
 const queryClient = useQueryClient()
@@ -319,14 +356,13 @@ watch(latestJob, (job) => {
 
 // ─── Schedule ────────────────────────────────────────────────────────────────
 
-const scheduleHour     = ref(8)
-const scheduleMinute   = ref(0)
+const maxScheduleCrons = MAX_SCHEDULE_CRONS
+const scheduleTimes    = ref<ScheduleTimeSlot[]>([{ hour: 8, minute: 0 }])
 const scheduleTimezone = ref('America/New_York')
 const isSavingSchedule = ref(false)
 const togglingEnabled  = ref(false)
 const scheduleError    = ref<string | null>(null)
 
-// 12-hour hour options
 const hourOptions = Array.from({ length: 24 }, (_, i) => {
   const period = i < 12 ? 'AM' : 'PM'
   const h12    = i === 0 ? 12 : i > 12 ? i - 12 : i
@@ -341,21 +377,37 @@ const { data: schedule, isLoading: scheduleLoading } = useQuery({
   },
 })
 
+function cronToSlot(cron: string): ScheduleTimeSlot {
+  const parts = cron.split(' ')
+  const minute = parseInt(parts[0] ?? '0', 10)
+  const hour   = parseInt(parts[1] ?? '8', 10)
+  return {
+    hour:   Number.isNaN(hour)   ? 8 : hour,
+    minute: Number.isNaN(minute) ? 0 : minute,
+  }
+}
+
 watch(schedule, (s) => {
   if (!s) return
-  // Parse cron to hour/minute: "30 8 * * *" → hour=8, minute=30
-  const parts = s.cron.split(' ')
-  if (parts.length >= 2) {
-    const minute = parseInt(parts[0], 10)
-    const hour   = parseInt(parts[1], 10)
-    if (!isNaN(hour))   scheduleHour.value   = hour
-    if (!isNaN(minute)) scheduleMinute.value = minute
-  }
+  const crons = s.crons?.length ? s.crons : parseCrons(s.cron)
+  scheduleTimes.value = (crons.length > 0 ? crons : ['0 8 * * *']).map(cronToSlot)
   scheduleTimezone.value = s.timezone
 }, { immediate: true })
 
-function buildCron(): string {
-  return `${scheduleMinute.value} ${scheduleHour.value} * * *`
+function buildCrons(): string[] {
+  return scheduleTimes.value.map(
+    (slot) => `${slot.minute} ${slot.hour} * * *`,
+  )
+}
+
+function addRunTime() {
+  if (scheduleTimes.value.length >= MAX_SCHEDULE_CRONS) return
+  scheduleTimes.value.push({ hour: 17, minute: 0 })
+}
+
+function removeRunTime(index: number) {
+  if (scheduleTimes.value.length <= 1) return
+  scheduleTimes.value.splice(index, 1)
 }
 
 async function saveSchedule(enabled?: boolean) {
@@ -366,7 +418,7 @@ async function saveSchedule(enabled?: boolean) {
 
   try {
     const body: Record<string, unknown> = {
-      cron:     buildCron(),
+      crons:    buildCrons(),
       timezone: scheduleTimezone.value,
     }
     if (enabled !== undefined) body.enabled = enabled
@@ -740,6 +792,47 @@ async function saveSchedule(enabled?: boolean) {
   display: flex;
   gap: 1.5rem;
   flex-wrap: wrap;
+}
+
+.run-times-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.run-time-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-add-time {
+  margin-top: 0.5rem;
+  align-self: flex-start;
+}
+
+.btn-icon-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid #fca5a5;
+  background: #fff;
+  color: #dc2626;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.btn-icon-danger:not(:disabled):hover {
+  background: #fef2f2;
+}
+
+.btn-icon-danger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .time-select-wrap {
