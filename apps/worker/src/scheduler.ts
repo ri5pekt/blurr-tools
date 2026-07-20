@@ -8,18 +8,24 @@ const SYNC_INTERVAL = 5 * 60 * 1000 // re-sync every 5 minutes
 const JOB_NAME      = 'scheduled'
 
 interface FeatureScheduleState {
-  lastCron:     string | null
-  lastEnabled:  boolean | null
-  lastTimezone: string | null
+  lastCron:              string | null
+  lastEnabled:           boolean | null
+  lastTimezone:          string | null
+  lastIncludeDayBefore:  boolean | null
 }
 
 const state: Record<string, FeatureScheduleState> = {
-  daily_orders_export:      { lastCron: null, lastEnabled: null, lastTimezone: null },
-  blurr_daily_stats_export: { lastCron: null, lastEnabled: null, lastTimezone: null },
+  daily_orders_export:      { lastCron: null, lastEnabled: null, lastTimezone: null, lastIncludeDayBefore: null },
+  blurr_daily_stats_export: { lastCron: null, lastEnabled: null, lastTimezone: null, lastIncludeDayBefore: null },
 }
 
 function isScheduledJobName(name: string): boolean {
   return name === JOB_NAME || name.startsWith(`${JOB_NAME}:`)
+}
+
+function getIncludeDayBefore(options: unknown): boolean {
+  if (!options || typeof options !== 'object') return false
+  return Boolean((options as { includeDayBefore?: unknown }).includeDayBefore)
 }
 
 /**
@@ -38,15 +44,19 @@ async function syncFeatureSchedule(feature: 'daily_orders_export' | 'blurr_daily
     .where(eq(scheduledExports.feature, feature))
     .limit(1)
 
-  const enabled  = schedule?.enabled  ?? false
-  const cron     = schedule?.cron     ?? null
-  const timezone = schedule?.timezone ?? 'America/New_York'
+  const enabled           = schedule?.enabled  ?? false
+  const cron              = schedule?.cron     ?? null
+  const timezone          = schedule?.timezone ?? 'America/New_York'
+  const includeDayBefore  = feature === 'daily_orders_export'
+    ? getIncludeDayBefore(schedule?.options)
+    : false
 
   const s = state[feature]!
   const changed =
     enabled !== s.lastEnabled ||
     cron !== s.lastCron ||
-    timezone !== s.lastTimezone
+    timezone !== s.lastTimezone ||
+    includeDayBefore !== s.lastIncludeDayBefore
 
   if (!changed) return
 
@@ -66,20 +76,22 @@ async function syncFeatureSchedule(feature: 'daily_orders_export' | 'blurr_daily
       const name = `${JOB_NAME}:${pattern}`
       await queue.add(
         name,
-        { date: 'auto' },
+        { date: 'auto', includeDayBefore },
         { repeat: { pattern, tz: timezone } },
       )
     }
     console.log(
-      `[scheduler] Registered ${crons.length} repeatable job(s) for ${feature}: ${crons.join(', ')} (${timezone})`,
+      `[scheduler] Registered ${crons.length} repeatable job(s) for ${feature}: ${crons.join(', ')} (${timezone})` +
+        (includeDayBefore ? ' [+day-before catch-up]' : ''),
     )
   } else {
     console.log(`[scheduler] Schedule disabled — no repeatable job registered for ${feature}`)
   }
 
-  s.lastEnabled  = enabled
-  s.lastCron     = cron
-  s.lastTimezone = timezone
+  s.lastEnabled          = enabled
+  s.lastCron             = cron
+  s.lastTimezone         = timezone
+  s.lastIncludeDayBefore = includeDayBefore
 }
 
 async function syncSchedule(): Promise<void> {

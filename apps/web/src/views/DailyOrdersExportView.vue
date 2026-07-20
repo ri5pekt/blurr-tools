@@ -99,6 +99,21 @@
           Runs at each time below and exports the previous day's stats. Add a morning and afternoon time to refresh twice a day.
         </p>
 
+        <label class="checkbox-row" :class="{ 'checkbox-row--disabled': !isAdmin }">
+          <input
+            v-model="includeDayBefore"
+            type="checkbox"
+            class="checkbox-input"
+            :disabled="!isAdmin || isSavingSchedule"
+          />
+          <span class="checkbox-text">
+            <span class="checkbox-title">Also re-export the day before yesterday</span>
+            <span class="checkbox-desc">
+              Queues a second export for two days ago so late-settling refunds and other delayed Metorik updates are picked up.
+            </span>
+          </span>
+        </label>
+
         <div class="field">
           <label>Run times</label>
           <div class="run-times-list">
@@ -359,6 +374,7 @@ watch(latestJob, (job) => {
 const maxScheduleCrons = MAX_SCHEDULE_CRONS
 const scheduleTimes    = ref<ScheduleTimeSlot[]>([{ hour: 8, minute: 0 }])
 const scheduleTimezone = ref('America/New_York')
+const includeDayBefore = ref(false)
 const isSavingSchedule = ref(false)
 const togglingEnabled  = ref(false)
 const scheduleError    = ref<string | null>(null)
@@ -392,6 +408,7 @@ watch(schedule, (s) => {
   const crons = s.crons?.length ? s.crons : parseCrons(s.cron)
   scheduleTimes.value = (crons.length > 0 ? crons : ['0 8 * * *']).map(cronToSlot)
   scheduleTimezone.value = s.timezone
+  includeDayBefore.value = Boolean(s.options?.includeDayBefore)
 }, { immediate: true })
 
 function buildCrons(): string[] {
@@ -418,8 +435,9 @@ async function saveSchedule(enabled?: boolean) {
 
   try {
     const body: Record<string, unknown> = {
-      crons:    buildCrons(),
-      timezone: scheduleTimezone.value,
+      crons:            buildCrons(),
+      timezone:         scheduleTimezone.value,
+      includeDayBefore: includeDayBefore.value,
     }
     if (enabled !== undefined) body.enabled = enabled
 
@@ -786,6 +804,49 @@ async function saveSchedule(enabled?: boolean) {
   margin: 0;
   font-size: 0.8125rem;
   color: #6b7280;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  cursor: pointer;
+}
+
+.checkbox-row--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.checkbox-input {
+  margin-top: 0.15rem;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--blurr-primary);
+  flex-shrink: 0;
+  cursor: inherit;
+}
+
+.checkbox-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.checkbox-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.checkbox-desc {
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.4;
 }
 
 .schedule-row {

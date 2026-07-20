@@ -30,6 +30,12 @@ export interface Job {
   updatedAt: string
 }
 
+/** Options stored on scheduled_exports.options for daily_orders_export */
+export interface DailyOrdersScheduleOptions {
+  /** When true, each auto-run also re-exports the day before yesterday. */
+  includeDayBefore?: boolean
+}
+
 export interface ScheduledExport {
   id: string
   feature: FeatureKey
@@ -40,7 +46,7 @@ export interface ScheduledExport {
   crons?: string[]
   timezone: string
   enabled: boolean
-  options: Record<string, unknown> | null
+  options: (DailyOrdersScheduleOptions & Record<string, unknown>) | null
   createdAt: string
   updatedAt: string
 }

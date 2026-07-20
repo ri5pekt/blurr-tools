@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq'
-import { connection } from '../queues.js'
+import { connection, queues } from '../queues.js'
 import { db } from '../db.js'
 import { jobs } from '@blurr-tools/db'
 import { startJob, updateJobProgress, completeJob, failJob } from '../utils/job.js'
@@ -10,18 +10,38 @@ import { writeOrdersToSheet } from '../google/sheets.js'
 interface DailyOrdersJobData {
   jobId?: string
   date:   string // YYYY-MM-DD or 'auto' for previous day
+  /** When set with date=auto, also queue an export for the day before yesterday. */
+  includeDayBefore?: boolean
+}
+
+function getDaysAgo(n: number): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() - n)
+  return d.toISOString().slice(0, 10)
 }
 
 function getPreviousDay(): string {
-  const d = new Date()
-  d.setUTCDate(d.getUTCDate() - 1)
-  return d.toISOString().slice(0, 10)
+  return getDaysAgo(1)
 }
 
 export function registerDailyOrdersProcessor(): Worker {
   const worker = new Worker<DailyOrdersJobData>(
     'daily_orders_export',
     async (job) => {
+      // Catch-up: re-export day-before-yesterday so late refunds settle into the sheet
+      if (job.data.date === 'auto' && job.data.includeDayBefore) {
+        const dayBefore = getDaysAgo(2)
+        await queues.dailyOrdersExport.add('export', { date: dayBefore })
+        log({
+          level:   'info',
+          source:  'scheduler',
+          action:  'export.catchup.queued',
+          message: `Also queued catch-up export for ${dayBefore} (day before yesterday)`,
+          feature: 'daily_orders_export',
+          meta:    { date: dayBefore, reason: 'includeDayBefore' },
+        })
+      }
+
       const date = job.data.date === 'auto' ? getPreviousDay() : job.data.date
 
       // For scheduled jobs (no jobId in data), create a DB row here

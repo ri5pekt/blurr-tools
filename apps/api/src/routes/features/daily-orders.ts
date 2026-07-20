@@ -22,12 +22,18 @@ const exportBodySchema = z.object({
 })
 
 const scheduleBodySchema = z.object({
-  enabled:  z.boolean().optional(),
-  cron:     z.string().optional(),
-  crons:    z.array(z.string()).min(1).max(MAX_SCHEDULE_CRONS).optional(),
-  timezone: z.string().optional(),
+  enabled:           z.boolean().optional(),
+  cron:              z.string().optional(),
+  crons:             z.array(z.string()).min(1).max(MAX_SCHEDULE_CRONS).optional(),
+  timezone:          z.string().optional(),
+  includeDayBefore:  z.boolean().optional(),
 }).refine(
-  (b) => b.enabled !== undefined || b.cron !== undefined || b.crons !== undefined || b.timezone !== undefined,
+  (b) =>
+    b.enabled !== undefined ||
+    b.cron !== undefined ||
+    b.crons !== undefined ||
+    b.timezone !== undefined ||
+    b.includeDayBefore !== undefined,
   { message: 'At least one field is required' },
 )
 
@@ -132,7 +138,7 @@ export async function dailyOrdersRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Invalid request body', code: 'VALIDATION_ERROR', details: parsed.error.flatten() })
     }
 
-    const { enabled, timezone } = parsed.data
+    const { enabled, timezone, includeDayBefore } = parsed.data
     const crons = resolveCrons(parsed.data)
 
     if (crons !== null && crons.length === 0) {
@@ -153,6 +159,11 @@ export async function dailyOrdersRoutes(fastify: FastifyInstance) {
     if (timezone !== undefined) updates.timezone = timezone
     if (crons    !== null)      updates.cron     = serializeCrons(crons)
 
+    if (includeDayBefore !== undefined) {
+      const prev = (existing?.options ?? {}) as Record<string, unknown>
+      updates.options = { ...prev, includeDayBefore }
+    }
+
     let schedule
 
     if (existing) {
@@ -171,6 +182,9 @@ export async function dailyOrdersRoutes(fastify: FastifyInstance) {
           cron:     crons ? serializeCrons(crons) : '0 8 * * *',
           timezone: timezone ?? 'America/New_York',
           enabled:  enabled  ?? false,
+          options:  includeDayBefore !== undefined
+            ? { includeDayBefore }
+            : null,
         })
         .returning()
       schedule = created
