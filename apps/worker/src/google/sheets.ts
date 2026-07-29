@@ -51,7 +51,7 @@ export interface DailyStats {
   grossRevenue:    number  // Metorik revenue-by-date gross
   netRevenue:      number  // Metorik revenue-by-date net  (= dashboard "Net Revenue")
   totalRefunds:    number  // Metorik revenue-by-date refunds (by refund date)
-  newCustomers:    number  // Metorik customers-by-date    (= dashboard "New Customers")
+  newCustomers:    number  // Metorik Order Retention "New Customers"
   returningOrders: number  // Metorik new-returning-by-date returning_orders
   totalOrders:     number  // Metorik revenue-by-date orders
   unitsSold:       number  // Metorik revenue-by-date items

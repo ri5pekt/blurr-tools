@@ -11,8 +11,8 @@ export interface MetorikDailyStats {
   discounts:               number
   salesTax:                number
   netRevenue:              number   // = Metorik dashboard "Net Revenue"
-  newCustomers:            number   // = Metorik dashboard "New Customers" (customers-by-date)
-  returningCustomerOrders: number   // orders from returning customers
+  newCustomers:            number   // = Order Retention "New Customers"
+  returningCustomerOrders: number   // = Order Retention "Returning Orders"
   productUnits:            Record<string, number>  // productTitle → gross units sold
 }
 
@@ -27,10 +27,6 @@ interface RevenueByDateResponse {
     taxes:          number
     net:            number
   }>
-}
-
-interface CustomersByDateResponse {
-  data: Array<{ customers: number }>
 }
 
 interface NewReturningResponse {
@@ -81,21 +77,19 @@ async function metorikFetch(path: string): Promise<Response> {
 /**
  * Fetches aggregated daily stats from Metorik for a single date (YYYY-MM-DD).
  *
- * Uses two Metorik endpoints:
- *   - /reports/revenue-by-date  — gross sales, orders, items, refunds, taxes, net
- *   - /products                 — per-product gross units sold (paginated)
+ * Endpoints:
+ *   - /reports/revenue-by-date — gross, orders, items, refunds, taxes, net
+ *   - /reports/orders-new-returning-customers-by-date — Order Retention J/K
+ *   - /products — per-product gross units sold (paginated)
  *
- * Refunds are deducted on the day they are processed (matching Metorik's
- * own dashboard), so the numbers here are always consistent with what you
- * see in the Metorik UI regardless of which day the original order was placed.
+ * New Customers / Returning Orders match Metorik Order Retention
+ * ("New vs. Returning Breakdown"). Refunds are by refund date.
  */
 export async function fetchMetorikDailyStats(date: string): Promise<MetorikDailyStats> {
   const dateParams = new URLSearchParams({ start_date: date, end_date: date, group_by: 'day' })
 
-  // ── Revenue totals + customer counts — fire in parallel ────────────────────
-  const [revRes, custRes, nrRes] = await Promise.all([
+  const [revRes, nrRes] = await Promise.all([
     metorikFetch(`/reports/revenue-by-date?${dateParams.toString()}`),
-    metorikFetch(`/reports/customers-by-date?${dateParams.toString()}`),
     metorikFetch(`/reports/orders-new-returning-customers-by-date?${dateParams.toString()}`),
   ])
 
@@ -103,22 +97,16 @@ export async function fetchMetorikDailyStats(date: string): Promise<MetorikDaily
     const text = await revRes.text()
     throw new Error(`Metorik revenue-by-date failed (${revRes.status}): ${text}`)
   }
-  if (!custRes.ok) {
-    const text = await custRes.text()
-    throw new Error(`Metorik customers-by-date failed (${custRes.status}): ${text}`)
-  }
   if (!nrRes.ok) {
     const text = await nrRes.text()
     throw new Error(`Metorik new-returning-customers-by-date failed (${nrRes.status}): ${text}`)
   }
 
-  const revData  = await revRes.json()  as RevenueByDateResponse
-  const custData = await custRes.json() as CustomersByDateResponse
-  const nrData   = await nrRes.json()   as NewReturningResponse
+  const revData = await revRes.json() as RevenueByDateResponse
+  const nrData  = await nrRes.json()  as NewReturningResponse
 
-  const rev  = revData.data[0]
-  const cust = custData.data[0]
-  const nr   = nrData.data[0]
+  const rev = revData.data[0]
+  const nr  = nrData.data[0]
 
   if (!rev) {
     return {
@@ -176,7 +164,7 @@ export async function fetchMetorikDailyStats(date: string): Promise<MetorikDaily
     discounts:               Math.round(rev.discounts     * 100) / 100,
     salesTax:                Math.round(rev.taxes         * 100) / 100,
     netRevenue:              Math.round(rev.net           * 100) / 100,
-    newCustomers:            cust?.customers              ?? 0,
+    newCustomers:            nr?.new_customers            ?? 0,
     returningCustomerOrders: nr?.returning_orders         ?? 0,
     productUnits,
   }
