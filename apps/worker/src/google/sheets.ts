@@ -51,8 +51,7 @@ export interface DailyStats {
   grossRevenue:    number  // Metorik revenue-by-date gross
   netRevenue:      number  // Metorik revenue-by-date net  (= dashboard "Net Revenue")
   totalRefunds:    number  // Metorik revenue-by-date refunds (by refund date)
-  newCustomers:    number  // Metorik Order Retention "New Customers"
-  returningOrders: number  // Metorik new-returning-by-date returning_orders
+  newCustomers:    number  // Metorik dashboard "New Customers" (customers-by-date)
   totalOrders:     number  // Metorik revenue-by-date orders
   unitsSold:       number  // Metorik revenue-by-date items
 }
@@ -123,7 +122,7 @@ export interface WriteOrdersResult {
  *   H = Net Website Revenue
  *   I = Website Refunds
  *   J = New Customers
- *   K = Returning Customer Orders
+ *   K = Returning Customer Orders (sheet formula — not written)
  *   L = Total Website Orders
  *   M = Website Units
  */
@@ -151,31 +150,31 @@ export async function writeOrdersToSheet(
   // ISO timestamp for the "Last Update" column (F)
   const lastUpdate = new Date().toISOString().replace('T', ' ').slice(0, 19)
 
-  // Write F:M — 8 columns
-  // F: Last Update timestamp
-  // G: Gross Website Revenue
-  // H: Net Website Revenue
-  // I: Website Refunds
-  // J: New Customers
-  // K: Returning Customer Orders
-  // L: Total Website Orders
-  // M: Website Units
-  const values = [[
-    lastUpdate,
-    stats.grossRevenue,
-    stats.netRevenue,
-    stats.totalRefunds,
-    stats.newCustomers,
-    stats.returningOrders,
-    stats.totalOrders,
-    stats.unitsSold,
-  ]]
-
-  await sheets.spreadsheets.values.update({
+  // Write F:J and L:M separately so column K (sheet formula) is left untouched.
+  await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId,
-    range:            `'${tabName}'!F${rowNumber}:M${rowNumber}`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody:      { values },
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        {
+          range:  `'${tabName}'!F${rowNumber}:J${rowNumber}`,
+          values: [[
+            lastUpdate,
+            stats.grossRevenue,
+            stats.netRevenue,
+            stats.totalRefunds,
+            stats.newCustomers,
+          ]],
+        },
+        {
+          range:  `'${tabName}'!L${rowNumber}:M${rowNumber}`,
+          values: [[
+            stats.totalOrders,
+            stats.unitsSold,
+          ]],
+        },
+      ],
+    },
   })
 
   const sheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`

@@ -116,13 +116,12 @@ export function registerDailyOrdersProcessor(): Worker {
         })
 
         const result = await writeOrdersToSheet(date, {
-          grossRevenue:    metorikStats.grossSales,
-          netRevenue:      metorikStats.netRevenue,
-          totalRefunds:    metorikStats.totalRefunds,
-          newCustomers:    metorikStats.newCustomers,
-          returningOrders: metorikStats.returningCustomerOrders,
-          totalOrders:     metorikStats.totalOrders,
-          unitsSold:       metorikStats.totalUnits,
+          grossRevenue: metorikStats.grossSales,
+          netRevenue:   metorikStats.netRevenue,
+          totalRefunds: metorikStats.totalRefunds,
+          newCustomers: metorikStats.newCustomers,
+          totalOrders:  metorikStats.totalOrders,
+          unitsSold:    metorikStats.totalUnits,
         })
 
         await completeJob(dbJobId, {

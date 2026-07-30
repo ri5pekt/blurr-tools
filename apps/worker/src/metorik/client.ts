@@ -11,8 +11,7 @@ export interface MetorikDailyStats {
   discounts:               number
   salesTax:                number
   netRevenue:              number   // = Metorik dashboard "Net Revenue"
-  newCustomers:            number   // = Order Retention "New Customers"
-  returningCustomerOrders: number   // = Order Retention "Returning Orders"
+  newCustomers:            number   // = Metorik dashboard "New Customers" (customers-by-date)
   productUnits:            Record<string, number>  // productTitle → gross units sold
 }
 
@@ -29,11 +28,8 @@ interface RevenueByDateResponse {
   }>
 }
 
-interface NewReturningResponse {
-  data: Array<{
-    new_customers:     number
-    returning_orders:  number
-  }>
+interface CustomersByDateResponse {
+  data: Array<{ customers: number }>
 }
 
 interface ProductsResponse {
@@ -79,48 +75,46 @@ async function metorikFetch(path: string): Promise<Response> {
  *
  * Endpoints:
  *   - /reports/revenue-by-date — gross, orders, items, refunds, taxes, net
- *   - /reports/orders-new-returning-customers-by-date — Order Retention J/K
+ *   - /reports/customers-by-date — dashboard "New Customers"
  *   - /products — per-product gross units sold (paginated)
  *
- * New Customers / Returning Orders match Metorik Order Retention
- * ("New vs. Returning Breakdown"). Refunds are by refund date.
+ * Refunds are by refund date (matches Metorik dashboard).
  */
 export async function fetchMetorikDailyStats(date: string): Promise<MetorikDailyStats> {
   const dateParams = new URLSearchParams({ start_date: date, end_date: date, group_by: 'day' })
 
-  const [revRes, nrRes] = await Promise.all([
+  const [revRes, custRes] = await Promise.all([
     metorikFetch(`/reports/revenue-by-date?${dateParams.toString()}`),
-    metorikFetch(`/reports/orders-new-returning-customers-by-date?${dateParams.toString()}`),
+    metorikFetch(`/reports/customers-by-date?${dateParams.toString()}`),
   ])
 
   if (!revRes.ok) {
     const text = await revRes.text()
     throw new Error(`Metorik revenue-by-date failed (${revRes.status}): ${text}`)
   }
-  if (!nrRes.ok) {
-    const text = await nrRes.text()
-    throw new Error(`Metorik new-returning-customers-by-date failed (${nrRes.status}): ${text}`)
+  if (!custRes.ok) {
+    const text = await custRes.text()
+    throw new Error(`Metorik customers-by-date failed (${custRes.status}): ${text}`)
   }
 
-  const revData = await revRes.json() as RevenueByDateResponse
-  const nrData  = await nrRes.json()  as NewReturningResponse
+  const revData  = await revRes.json()  as RevenueByDateResponse
+  const custData = await custRes.json() as CustomersByDateResponse
 
-  const rev = revData.data[0]
-  const nr  = nrData.data[0]
+  const rev  = revData.data[0]
+  const cust = custData.data[0]
 
   if (!rev) {
     return {
-      grossSales:              0,
-      totalOrders:             0,
-      totalUnits:              0,
-      totalRefunds:            0,
-      refundsCount:            0,
-      discounts:               0,
-      salesTax:                0,
-      netRevenue:              0,
-      newCustomers:            0,
-      returningCustomerOrders: 0,
-      productUnits:            {},
+      grossSales:   0,
+      totalOrders:  0,
+      totalUnits:   0,
+      totalRefunds: 0,
+      refundsCount: 0,
+      discounts:    0,
+      salesTax:     0,
+      netRevenue:   0,
+      newCustomers: 0,
+      productUnits: {},
     }
   }
 
@@ -156,16 +150,15 @@ export async function fetchMetorikDailyStats(date: string): Promise<MetorikDaily
   }
 
   return {
-    grossSales:              Math.round(rev.gross         * 100) / 100,
-    totalOrders:             rev.orders,
-    totalUnits:              rev.items,
-    totalRefunds:            Math.round(rev.refunds       * 100) / 100,
-    refundsCount:            rev.refunds_count,
-    discounts:               Math.round(rev.discounts     * 100) / 100,
-    salesTax:                Math.round(rev.taxes         * 100) / 100,
-    netRevenue:              Math.round(rev.net           * 100) / 100,
-    newCustomers:            nr?.new_customers            ?? 0,
-    returningCustomerOrders: nr?.returning_orders         ?? 0,
+    grossSales:   Math.round(rev.gross     * 100) / 100,
+    totalOrders:  rev.orders,
+    totalUnits:   rev.items,
+    totalRefunds: Math.round(rev.refunds   * 100) / 100,
+    refundsCount: rev.refunds_count,
+    discounts:    Math.round(rev.discounts * 100) / 100,
+    salesTax:     Math.round(rev.taxes     * 100) / 100,
+    netRevenue:   Math.round(rev.net       * 100) / 100,
+    newCustomers: cust?.customers ?? 0,
     productUnits,
   }
 }
