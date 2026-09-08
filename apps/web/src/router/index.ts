@@ -44,6 +44,11 @@ const router = createRouter({
           component: () => import('../views/BlurrDailyStatsView.vue'),
         },
         {
+          path:      'refunds-export',
+          name:      'refunds-export',
+          component: () => import('../views/RefundsExportView.vue'),
+        },
+        {
           path:      'settings',
           name:      'settings',
           component: () => import('../views/SettingsView.vue'),

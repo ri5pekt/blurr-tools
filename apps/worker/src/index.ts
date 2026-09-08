@@ -3,6 +3,7 @@ import { connection } from './queues.js'
 import { registerDailyOrdersProcessor } from './processors/daily-orders.js'
 import { registerPriorityExportProcessor } from './processors/priority-export.js'
 import { registerBlurrDailyStatsProcessor } from './processors/blurr-daily-stats.js'
+import { registerRefundsExportProcessor } from './processors/refunds-export.js'
 import { startScheduler } from './scheduler.js'
 
 connection.on('connect', () => {
@@ -16,6 +17,7 @@ connection.on('error', (err: Error) => {
 const dailyOrdersWorker      = registerDailyOrdersProcessor()
 const priorityExportWorker   = registerPriorityExportProcessor()
 const blurrDailyStatsWorker  = registerBlurrDailyStatsProcessor()
+const refundsExportWorker    = registerRefundsExportProcessor()
 
 await startScheduler()
 
@@ -27,6 +29,7 @@ async function shutdown(signal: string) {
     await dailyOrdersWorker.close()
     await priorityExportWorker.close()
     await blurrDailyStatsWorker.close()
+    await refundsExportWorker.close()
     await connection.quit()
     console.log('[worker] Shutdown complete.')
     process.exit(0)

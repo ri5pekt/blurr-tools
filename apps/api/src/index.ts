@@ -17,6 +17,7 @@ import { logsRoutes } from './routes/logs.js'
 import { dailyOrdersRoutes } from './routes/features/daily-orders.js'
 import { priorityExportRoutes } from './routes/features/priority-export.js'
 import { blurrDailyStatsRoutes } from './routes/features/blurr-daily-stats.js'
+import { refundsExportRoutes } from './routes/features/refunds-export.js'
 
 // ─── Run DB migrations before starting the server ────────────────────────────
 
@@ -67,7 +68,7 @@ fastify.decorate('authenticate', async function (
 
 fastify.get('/api/health', async () => ({
   status: 'ok',
-  version: '1.1.3',
+  version: '1.1.4',
   timestamp: new Date().toISOString(),
 }))
 
@@ -78,6 +79,7 @@ await fastify.register(logsRoutes)
 await fastify.register(dailyOrdersRoutes)
 await fastify.register(priorityExportRoutes)
 await fastify.register(blurrDailyStatsRoutes)
+await fastify.register(refundsExportRoutes)
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 

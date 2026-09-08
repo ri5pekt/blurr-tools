@@ -21,6 +21,7 @@ export const featureEnum = pgEnum('feature', [
   'daily_orders_export',
   'priority_export',
   'blurr_daily_stats_export', // added in migration 0003
+  'refunds_export',           // added in migration 0004
 ])
 
 // ─── Log enums ────────────────────────────────────────────────────────────────

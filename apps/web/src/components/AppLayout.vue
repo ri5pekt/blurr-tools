@@ -124,6 +124,7 @@ const navGroups = computed<NavGroup[]>(() => {
         { to: '/app/daily-orders',       label: 'Daily Orders',    icon: 'pi-calendar' },
         { to: '/app/priority-export',    label: 'Priority Export', icon: 'pi-file-export' },
         { to: '/app/blurr-daily-stats',  label: 'Blurr Daily Stats', icon: 'pi-chart-bar' },
+        { to: '/app/refunds-export',     label: 'Refunds Export',  icon: 'pi-replay' },
       ],
     },
   ]

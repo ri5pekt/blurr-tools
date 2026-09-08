@@ -17,11 +17,21 @@ export interface ShopifyRefundTransaction {
   amount: string
 }
 
+export interface ShopifyRefundLineItem {
+  quantity:  number
+  subtotal:  string
+  line_item: {
+    title: string
+    sku:   string | null
+  } | null
+}
+
 export interface ShopifyRefund {
-  id:           number
-  created_at:   string
-  transactions: ShopifyRefundTransaction[]
-  refund_line_items: Array<{ quantity: number }>
+  id:                number
+  created_at:        string
+  note:              string | null
+  transactions:      ShopifyRefundTransaction[]
+  refund_line_items: ShopifyRefundLineItem[]
 }
 
 export interface ShopifyCustomer {
@@ -239,6 +249,10 @@ const PRIORITY_ORDERS_FIELDS = [
   'line_items', 'refunds', 'tags',
 ].join(',')
 
+const REFUNDS_ORDERS_FIELDS = [
+  'id', 'name', 'email', 'created_at', 'currency', 'customer', 'refunds',
+].join(',')
+
 /**
  * Fetches all orders in a date range (YYYY-MM-DD to YYYY-MM-DD), all at once.
  * Uses the store's IANA timezone for day boundaries so that selected dates match
@@ -265,6 +279,61 @@ export async function fetchOrdersForPriorityRange(dateFrom: string, dateTo: stri
         status:         'any',
         limit:          '250',
         fields:         PRIORITY_ORDERS_FIELDS,
+      })
+      path      = `/orders.json?${params.toString()}`
+      firstPage = false
+    } else {
+      path = `/orders.json?page_info=${pageInfo!}&limit=250`
+    }
+
+    const res = await shopifyFetch(path, token)
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Shopify orders fetch failed (${res.status}): ${text}`)
+    }
+
+    const data = await res.json() as { orders: ShopifyOrder[] }
+    orders.push(...data.orders)
+
+    const link      = res.headers.get('Link') ?? ''
+    const nextMatch = link.match(/<[^>]*[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/)
+    pageInfo = nextMatch ? decodeURIComponent(nextMatch[1]) : null
+  }
+
+  return orders
+}
+
+/**
+ * Fetches all orders *updated* within a date range (YYYY-MM-DD to YYYY-MM-DD),
+ * using the store's IANA timezone for day boundaries.
+ *
+ * Used for the Refunds Export: Shopify has no endpoint to query "refunds
+ * created in X range" directly, and a refund always bumps the parent order's
+ * `updated_at`. So we fetch every order updated in the window (regardless of
+ * when it was originally placed) and let the caller filter each order's
+ * `refunds` array down to the ones whose own `created_at` falls in range.
+ */
+export async function fetchOrdersUpdatedInRange(dateFrom: string, dateTo: string): Promise<ShopifyOrder[]> {
+  const token    = await getAccessToken()
+  const storeTz  = await getStoreTimezone()
+  const { min: startIso } = localDayToUtcWindow(dateFrom, storeTz)
+  const { max: endIso }   = localDayToUtcWindow(dateTo,   storeTz)
+
+  const orders: ShopifyOrder[] = []
+  let pageInfo: string | null = null
+  let firstPage = true
+
+  while (firstPage || pageInfo !== null) {
+    let path: string
+
+    if (firstPage) {
+      const params = new URLSearchParams({
+        updated_at_min: startIso,
+        updated_at_max: endIso,
+        status:         'any',
+        limit:          '250',
+        fields:         REFUNDS_ORDERS_FIELDS,
       })
       path      = `/orders.json?${params.toString()}`
       firstPage = false
