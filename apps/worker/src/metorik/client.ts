@@ -10,6 +10,7 @@ export interface MetorikDailyStats {
   refundsCount:            number
   discounts:               number
   salesTax:                number
+  shipping:                number   // customer-paid shipping (included in gross, excluded from net)
   netRevenue:              number   // = Metorik dashboard "Net Revenue"
   newCustomers:            number   // = Metorik dashboard "New Customers" (customers-by-date)
   productUnits:            Record<string, number>  // productTitle → gross units sold
@@ -24,6 +25,7 @@ interface RevenueByDateResponse {
     refunds_count:  number
     discounts:      number
     taxes:          number
+    shipping:       number
     net:            number
   }>
 }
@@ -74,7 +76,9 @@ async function metorikFetch(path: string): Promise<Response> {
  * Fetches aggregated daily stats from Metorik for a single date (YYYY-MM-DD).
  *
  * Endpoints:
- *   - /reports/revenue-by-date — gross, orders, items, refunds, taxes, net
+ *   - /reports/revenue-by-date — gross, orders, items, refunds, taxes, shipping, net
+ *
+ * Identity (verified against the live report): gross = net + refunds + shipping + taxes.
  *   - /reports/customers-by-date — dashboard "New Customers"
  *   - /products — per-product gross units sold (paginated)
  *
@@ -112,6 +116,7 @@ export async function fetchMetorikDailyStats(date: string): Promise<MetorikDaily
       refundsCount: 0,
       discounts:    0,
       salesTax:     0,
+      shipping:     0,
       netRevenue:   0,
       newCustomers: 0,
       productUnits: {},
@@ -157,6 +162,7 @@ export async function fetchMetorikDailyStats(date: string): Promise<MetorikDaily
     refundsCount: rev.refunds_count,
     discounts:    Math.round(rev.discounts * 100) / 100,
     salesTax:     Math.round(rev.taxes     * 100) / 100,
+    shipping:     Math.round(rev.shipping  * 100) / 100,
     netRevenue:   Math.round(rev.net       * 100) / 100,
     newCustomers: cust?.customers ?? 0,
     productUnits,

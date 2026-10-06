@@ -49,7 +49,7 @@ function getDateLabel(date: string): string {
 
 export interface DailyStats {
   grossRevenue:    number  // Metorik revenue-by-date gross
-  netRevenue:      number  // Metorik revenue-by-date net  (= dashboard "Net Revenue")
+  netRevenue:      number  // Metorik net + shipping + taxes, so column G = H + I
   totalRefunds:    number  // Metorik revenue-by-date refunds (by refund date)
   newCustomers:    number  // Metorik dashboard "New Customers" (customers-by-date)
   totalOrders:     number  // Metorik revenue-by-date orders
@@ -118,9 +118,10 @@ export interface WriteOrdersResult {
  *
  * Column mapping (matches sheet headers):
  *   F = Last Update (timestamp)
- *   G = Gross Website Revenue
- *   H = Net Website Revenue
- *   I = Website Refunds
+ *   G = Gross Website Revenue          (Metorik gross)
+ *   H = Net Website Revenue            (Metorik net + shipping + taxes)
+ *   I = Website Refunds                (Metorik refunds)
+ *   Metorik identity: gross = net + refunds + shipping + taxes, so G = H + I.
  *   J = New Customers
  *   K = Returning Customer Orders (sheet formula — not written)
  *   L = Total Website Orders

@@ -115,9 +115,16 @@ export function registerDailyOrdersProcessor(): Worker {
           jobId:   dbJobId,
         })
 
+        // Metorik gross includes customer-paid shipping and tax; dashboard net does not.
+        // gross = net + refunds + shipping + taxes, so H must be net + shipping + taxes
+        // for Master Sheet column G to equal H + I.
+        const netWebsiteRevenue = Math.round(
+          (metorikStats.netRevenue + metorikStats.shipping + metorikStats.salesTax) * 100,
+        ) / 100
+
         const result = await writeOrdersToSheet(date, {
           grossRevenue: metorikStats.grossSales,
-          netRevenue:   metorikStats.netRevenue,
+          netRevenue:   netWebsiteRevenue,
           totalRefunds: metorikStats.totalRefunds,
           newCustomers: metorikStats.newCustomers,
           totalOrders:  metorikStats.totalOrders,
